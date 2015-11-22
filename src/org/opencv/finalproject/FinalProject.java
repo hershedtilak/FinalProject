@@ -1,5 +1,8 @@
 package org.opencv.finalproject;
 
+import java.io.FileDescriptor;
+import java.io.IOException;
+
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
@@ -14,7 +17,12 @@ import org.opencv.imgproc.Imgproc;
 import org.opencv.finalproject.R;
 
 import android.app.Activity;
+import android.content.Intent;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.ParcelFileDescriptor;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -35,12 +43,17 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private Mat                    mRgba;
     private Mat                    mIntermediateMat;
     
+    private Bitmap				   mBitmap = null;
+    
     private double[]			   mColorData;
 
     private MenuItem               mItemPreviewRGBA;
     private MenuItem               mItemPreviewColorThresholded;
     private MenuItem               mItemPreviewCanny;
+    private MenuItem			   mItemChooseImage;
 
+    private Uri 				   selectedImageURI = null;
+    
     private CameraBridgeViewBase   mOpenCvCameraView;
 
     private BaseLoaderCallback  mLoaderCallback = new BaseLoaderCallback(this) {
@@ -90,8 +103,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             	
             	switch(action) {
             		case MotionEvent.ACTION_DOWN:
+            			// Bring up Menu if user touches at bottom of screen (left of screen in portrait mode)
             			if (event.getY() > mOpenCvCameraView.getHeight() - 150.0f)
             				FinalProject.this.openOptionsMenu();
+            			// Otherwise store value of pixel at touch location (but only if view mode is RGBA)
             			else if (mViewMode == VIEW_MODE_RGBA)
             			{
             				int x = (int)(event.getX()*mRgba.size().width/mOpenCvCameraView.getWidth());
@@ -112,6 +127,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         mItemPreviewRGBA = menu.add("Preview RGBA");
         mItemPreviewColorThresholded = menu.add("Preview Thresholded");
         mItemPreviewCanny = menu.add("Canny");
+        mItemChooseImage = menu.add("Choose Image");
         return true;
     }
 
@@ -158,7 +174,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         final int viewMode = mViewMode;
         switch (viewMode) {
         case VIEW_MODE_COLOR_THRESHOLD:
-            // input frame has gray scale format
+            // Threshold the color channels of the input frame (right now the threshold is hard-coded at plus or minus 25)
         	if (mColorData == null)
         		break;
         	Scalar lBound = new Scalar(mColorData[0]-25, mColorData[1]-25, mColorData[2]-25, mColorData[3]-10);
@@ -189,9 +205,43 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             mViewMode = VIEW_MODE_COLOR_THRESHOLD;
         } else if (item == mItemPreviewCanny) {
             mViewMode = VIEW_MODE_CANNY;
+        } else if (item == mItemChooseImage) {
+            Intent intent = new Intent();
+            intent.addCategory(Intent.CATEGORY_OPENABLE);
+            intent.setType("image/*");
+            intent.setAction(Intent.ACTION_GET_CONTENT);
+            startActivityForResult(Intent.createChooser(intent,
+                    "Select Picture"), 1);
         }
 
         return true;
+    }
+    
+    // Functions to select Bitmap from user's photos
+    public void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (resultCode == RESULT_OK) {
+            if (requestCode == 1) {
+                selectedImageURI = data.getData(); // GET REAL URI
+                Bitmap bmp = null;
+                Bitmap scaled_bmp = null;
+                
+                try {
+                	bmp = getBitmapFromUri(selectedImageURI);
+                	scaled_bmp = Bitmap.createScaledBitmap(bmp, 200, 200, false);  	
+                } catch (IOException e) {};
+                
+                mBitmap = scaled_bmp;
+            }                
+        }
+    }
+    
+    private Bitmap getBitmapFromUri(Uri uri) throws IOException {
+        ParcelFileDescriptor parcelFileDescriptor =
+                getContentResolver().openFileDescriptor(uri, "r");
+        FileDescriptor fileDescriptor = parcelFileDescriptor.getFileDescriptor();
+        Bitmap image = BitmapFactory.decodeFileDescriptor(fileDescriptor);
+        parcelFileDescriptor.close();
+        return image;
     }
 
 }
