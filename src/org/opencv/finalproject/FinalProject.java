@@ -16,8 +16,11 @@ import android.os.Bundle;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MotionEvent;
 import android.view.SurfaceView;
+import android.view.View;
 import android.view.WindowManager;
+import android.view.View.OnTouchListener;
 
 public class FinalProject extends Activity implements CvCameraViewListener2 {
     private static final String    TAG = "OCVSample::Activity";
@@ -75,6 +78,23 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView.setCvCameraViewListener(this);
         
         mViewMode = VIEW_MODE_CANNY;
+        
+        // set Touch Listener
+        mOpenCvCameraView.setOnTouchListener(new OnTouchListener() {
+            public boolean onTouch(View v, MotionEvent event) {
+    
+            	int action = event.getActionMasked();
+            	
+            	switch(action) {
+            		case MotionEvent.ACTION_DOWN:
+            			if (event.getY() > mOpenCvCameraView.getHeight() - 150.0f)
+            				FinalProject.this.openOptionsMenu();
+            			break;
+            	}
+
+                return true;
+            }
+        });
     }
 
     @Override
