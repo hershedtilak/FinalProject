@@ -12,6 +12,7 @@ import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.imgproc.Imgproc;
@@ -181,13 +182,18 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         final int viewMode = mViewMode;
         switch (viewMode) {
         case VIEW_MODE_COLOR_THRESHOLD:
-            // Threshold the color channels of the input frame (right now the threshold is hard-coded at plus or minus 25)
+
         	if (mColorData == null)
         		break;
-        	int thresh = 2;
+        	
+        	// Color Threshold (right now the threshold is hard-coded)        	
+        	double thresh = 1.5;
         	Scalar lBound = new Scalar(mColorData[0]/thresh, mColorData[1]/thresh, mColorData[2]/thresh, mColorData[3]/thresh);
         	Scalar uBound = new Scalar(mColorData[0]*thresh, mColorData[1]*thresh, mColorData[2]*thresh, mColorData[3]*thresh);
         	Core.inRange(inputFrame.rgba(),lBound, uBound, mIntermediateMat);
+        	
+        	// Low Pass Filter
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
         	
         	// Harris Corners
         	getHarrisCorners();
@@ -232,10 +238,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private void getHarrisCorners()
     {
     	/// Detector parameters
-    	int blockSize = 2;
-    	int apertureSize = 3;
-    	double k = 0.04;
-    	double thresh = 0.1;
+    	int blockSize = 7;
+    	int apertureSize = 5;
+    	double k = 0.015;
+    	double thresh = .5;
     	
     	/// Detect corners
     	Imgproc.cornerHarris( mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k, Core.BORDER_DEFAULT );
