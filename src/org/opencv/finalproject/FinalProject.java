@@ -10,6 +10,7 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Point;
 import org.opencv.core.Scalar;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
@@ -42,6 +43,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private int                    mViewMode;
     private Mat                    mRgba;
     private Mat                    mIntermediateMat;
+    private Mat					   mHarrisCornerMat;
     
     private Bitmap				   mBitmap = null;
     
@@ -89,6 +91,9 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.final_project_surface_view);
 
+        // uncomment when testing on actual device (creates problem with emulator)
+        //mOpenCvCameraView.setMaxFrameSize(mOpenCvCameraView.getMinimumWidth(), mOpenCvCameraView.getMinimumHeight());
+        
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
 
         mOpenCvCameraView.setCvCameraViewListener(this);
@@ -161,6 +166,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public void onCameraViewStarted(int width, int height) {
         mRgba = new Mat(height, width, CvType.CV_8UC4);
         mIntermediateMat = new Mat(height, width, CvType.CV_8UC4);
+        mHarrisCornerMat = new Mat(height, width, CvType.CV_32FC1);
         mColorData = new double[4];
         
     }
@@ -168,6 +174,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public void onCameraViewStopped() {
         mRgba.release();
         mIntermediateMat.release();
+        mHarrisCornerMat.release();
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
@@ -177,9 +184,14 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             // Threshold the color channels of the input frame (right now the threshold is hard-coded at plus or minus 25)
         	if (mColorData == null)
         		break;
-        	Scalar lBound = new Scalar(mColorData[0]-25, mColorData[1]-25, mColorData[2]-25, mColorData[3]-10);
-        	Scalar uBound = new Scalar(mColorData[0]+25, mColorData[1]+25, mColorData[2]+25, mColorData[3]+10);
-        	Core.inRange(inputFrame.rgba(),lBound, uBound, mRgba);
+        	int thresh = 2;
+        	Scalar lBound = new Scalar(mColorData[0]/thresh, mColorData[1]/thresh, mColorData[2]/thresh, mColorData[3]/thresh);
+        	Scalar uBound = new Scalar(mColorData[0]*thresh, mColorData[1]*thresh, mColorData[2]*thresh, mColorData[3]*thresh);
+        	Core.inRange(inputFrame.rgba(),lBound, uBound, mIntermediateMat);
+        	
+        	// Harris Corners
+        	getHarrisCorners();
+        	
             break;
         case VIEW_MODE_RGBA:
             // input frame has RBGA format
@@ -215,6 +227,31 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         }
 
         return true;
+    }
+    
+    private void getHarrisCorners()
+    {
+    	/// Detector parameters
+    	int blockSize = 2;
+    	int apertureSize = 3;
+    	double k = 0.04;
+    	double thresh = 0.1;
+    	
+    	/// Detect corners
+    	Imgproc.cornerHarris( mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k, Core.BORDER_DEFAULT );
+
+		Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
+    	/// Draw a circle around corners (for illustration purposes, comment out for performance)
+    	for( int j = 0; j < mHarrisCornerMat.rows() ; j++ )
+    	{ 
+    		for( int i = 0; i < mHarrisCornerMat.cols(); i++ )
+    	    {
+    			if((mHarrisCornerMat.get(j,i))[0] > thresh || (mHarrisCornerMat.get(j,i))[0] < -1*thresh)
+    	        {
+    				Imgproc.circle( mRgba, new Point( i, j ), 5,  new Scalar(0,255,0), 2, 8, 0 );
+    	        }
+    	    }
+    	}
     }
     
     // Functions to select Bitmap from user's photos
