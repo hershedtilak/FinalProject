@@ -48,7 +48,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     
     private Bitmap				   mBitmap = null;
     
-    private double[]			   mColorData;
+//    private double[]			   mColorData;
+    private Scalar				   mColorData;
+    private Point				   mTouchPoint;
+    private Boolean				   mTouchEvent = false;
 
     private MenuItem               mItemPreviewRGBA;
     private MenuItem               mItemPreviewColorThresholded;
@@ -105,6 +108,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         mOpenCvCameraView.setOnTouchListener(new OnTouchListener() {
             public boolean onTouch(View v, MotionEvent event) {
     
+            	/*
             	int action = event.getActionMasked();
             	
             	switch(action) {
@@ -121,8 +125,23 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             			}
             			break;
             	}
+				*/
+            	
+            	int cols = mRgba.cols();
+                int rows = mRgba.rows();
 
-                return true;
+                int xOffset = (mOpenCvCameraView.getWidth() - cols) / 2;
+                int yOffset = (mOpenCvCameraView.getHeight() - rows) / 2;
+
+                int x = (int)event.getX() - xOffset;
+                int y = (int)event.getY() - yOffset;
+            	
+                if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
+                else {
+                	mTouchPoint = new Point(x,y);
+                	mTouchEvent = true;
+                	return true;
+                }
             }
         });
     }
@@ -151,7 +170,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, this, mLoaderCallback);
+            //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
@@ -168,8 +188,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         mRgba = new Mat(height, width, CvType.CV_8UC4);
         mIntermediateMat = new Mat(height, width, CvType.CV_8UC4);
         mHarrisCornerMat = new Mat(height, width, CvType.CV_32FC1);
-        mColorData = new double[4];
-        
+        //mColorData = new Scalar(0,0,0,0);        
     }
 
     public void onCameraViewStopped() {
@@ -180,37 +199,71 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
         final int viewMode = mViewMode;
+        mRgba = inputFrame.rgba();
+        
+    	// Set color upon user selection
+    	if(mTouchEvent)	mColorData = new Scalar(mRgba.get((int)mTouchPoint.y, (int)mTouchPoint.x));
+        
         switch (viewMode) {
         case VIEW_MODE_COLOR_THRESHOLD:
-
-        	if (mColorData == null)
+        	// if color isn't set, just reset to RGBA mode
+        	if (mColorData == null) {
+        		mViewMode = VIEW_MODE_RGBA;
         		break;
+        	}
         	
-        	// Color Threshold (right now the threshold is hard-coded)        	
+        	// Perform color thresholding (right now the threshold is hard-coded)        	
         	double thresh = 1.5;
-        	Scalar lBound = new Scalar(mColorData[0]/thresh, mColorData[1]/thresh, mColorData[2]/thresh, mColorData[3]/thresh);
-        	Scalar uBound = new Scalar(mColorData[0]*thresh, mColorData[1]*thresh, mColorData[2]*thresh, mColorData[3]*thresh);
-        	Core.inRange(inputFrame.rgba(),lBound, uBound, mIntermediateMat);
         	
+        	Scalar uThresh = new Scalar(thresh,thresh,thresh,0);
+        	Scalar lThresh = new Scalar(1/thresh,1/thresh,1/thresh,0);
+        	
+        	Scalar uBound = mColorData.mul(uThresh);
+        	Scalar lBound = mColorData.mul(lThresh);
+        	
+        	lBound.val[3] = 0;
+        	uBound.val[3] = 255;
+        	
+        	Core.inRange(mRgba, lBound, uBound, mIntermediateMat);
+        	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA);
+        	        	
         	// Low Pass Filter
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
+        	// Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
         	
         	// Harris Corners
-        	getHarrisCorners();
+        	//getHarrisCorners();
+        	        	
+        	// Draw information regarding thresholding
+        	boolean drawThreshInfo = true;
+        	if(drawThreshInfo) {
+	        	Core.putText(mIntermediateMat, "Color = " + mColorData.toString(), new Point(50,mIntermediateMat.rows()-150),
+						Core.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,0,125,255), 2);
+	        	Core.putText(mIntermediateMat, "LB = " + lBound.toString(), new Point(50,mIntermediateMat.rows()-100),
+						Core.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,0,125,255), 2);
+	        	Core.putText(mIntermediateMat, "UB = " + uBound.toString(), new Point(50,mIntermediateMat.rows()-50),
+						Core.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,0,125,255), 2);
+        	}
         	
+        	mRgba = mIntermediateMat;
             break;
+            
         case VIEW_MODE_RGBA:
             // input frame has RBGA format
-            mRgba = inputFrame.rgba();
             break;
+            
         case VIEW_MODE_CANNY:
             // input frame has gray scale format
-            mRgba = inputFrame.rgba();
-            Imgproc.Canny(inputFrame.gray(), mIntermediateMat, 80, 100);
+            Imgproc.Canny(mRgba, mIntermediateMat, 80, 100);
             Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
             break;
         }
 
+    	// Draw color circle where user selected 
+        if(mTouchEvent) {
+    		Core.circle(mRgba, mTouchPoint, 150, mColorData, 40);
+    		mTouchEvent = false;
+    	}
+        
         return mRgba;
     }
 
@@ -244,7 +297,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	double thresh = .5;
     	
     	/// Detect corners
-    	Imgproc.cornerHarris( mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k, Core.BORDER_DEFAULT );
+    	Imgproc.cornerHarris( mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k );
 
 		Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
     	/// Draw a circle around corners (for illustration purposes, comment out for performance)
@@ -254,7 +307,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	    {
     			if((mHarrisCornerMat.get(j,i))[0] > thresh || (mHarrisCornerMat.get(j,i))[0] < -1*thresh)
     	        {
-    				Imgproc.circle( mRgba, new Point( i, j ), 5,  new Scalar(0,255,0), 2, 8, 0 );
+    				Core.circle( mRgba, new Point( i, j ), 5,  new Scalar(0,255,0), 2, 8, 0 );
     	        }
     	    }
     	}
