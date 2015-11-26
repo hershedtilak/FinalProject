@@ -2,7 +2,6 @@ package org.opencv.finalproject;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
-
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
@@ -17,12 +16,14 @@ import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.finalproject.R;
-
+import android.annotation.SuppressLint;
+import android.annotation.TargetApi;
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.util.Log;
@@ -53,6 +54,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private Point				   mTouchPoint;
     private Boolean				   mTouchEvent = false;
 
+    private int					   mFrameCounter = 0;
+    
     private MenuItem               mItemPreviewRGBA;
     private MenuItem               mItemPreviewColorThresholded;
     private MenuItem               mItemPreviewCanny;
@@ -94,9 +97,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         setContentView(R.layout.surface_view);
 
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.final_project_surface_view);
-
+        
         // uncomment when testing on actual device (creates problem with emulator)
         //mOpenCvCameraView.setMaxFrameSize(mOpenCvCameraView.getMinimumWidth(), mOpenCvCameraView.getMinimumHeight());
+        mOpenCvCameraView.setMaxFrameSize(400,400);
         
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
 
@@ -130,12 +134,12 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             	int cols = mRgba.cols();
                 int rows = mRgba.rows();
 
-                int xOffset = (mOpenCvCameraView.getWidth() - cols) / 2;
-                int yOffset = (mOpenCvCameraView.getHeight() - rows) / 2;
-
-                int x = (int)event.getX() - xOffset;
-                int y = (int)event.getY() - yOffset;
-            	
+//                int xOffset = (mOpenCvCameraView.getWidth() - cols) / 2;
+//                int yOffset = (mOpenCvCameraView.getHeight() - rows) / 2;
+                
+                int x = (int)event.getX() * cols/mOpenCvCameraView.getWidth();
+                int y = (int)event.getY() * rows/mOpenCvCameraView.getHeight();
+                
                 if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
                 else {
                 	mTouchPoint = new Point(x,y);
@@ -197,8 +201,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         mHarrisCornerMat.release();
     }
 
-    public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        final int viewMode = mViewMode;
+    public Mat onCameraFrame(CvCameraViewFrame inputFrame) {  	
+    	final int viewMode = mViewMode;
         mRgba = inputFrame.rgba();
         
     	// Set color upon user selection
@@ -225,16 +229,16 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	uBound.val[3] = 255;
         	
         	Core.inRange(mRgba, lBound, uBound, mIntermediateMat);
-        	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA);
+//        	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA);
         	        	
         	// Low Pass Filter
-        	// Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
         	
         	// Harris Corners
-        	//getHarrisCorners();
-        	        	
+        	getHarrisCorners();
+        	        	        	
         	// Draw information regarding thresholding
-        	boolean drawThreshInfo = true;
+        	boolean drawThreshInfo = false;
         	if(drawThreshInfo) {
 	        	Core.putText(mIntermediateMat, "Color = " + mColorData.toString(), new Point(50,mIntermediateMat.rows()-150),
 						Core.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,0,125,255), 2);
@@ -243,7 +247,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 	        	Core.putText(mIntermediateMat, "UB = " + uBound.toString(), new Point(50,mIntermediateMat.rows()-50),
 						Core.FONT_HERSHEY_SIMPLEX, 1, new Scalar(255,0,125,255), 2);
         	}
-        	
+        	        	
         	mRgba = mIntermediateMat;
             break;
             
@@ -258,9 +262,13 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             break;
         }
 
-    	// Draw color circle where user selected 
-        if(mTouchEvent) {
-    		Core.circle(mRgba, mTouchPoint, 150, mColorData, 40);
+    	// Draw color circle where user touched screen 
+        if(mTouchEvent) {        	
+        	// Can draw the coordinates to screen for debugging purposes
+//        	Core.putText(mRgba, mTouchPoint.y + " x " + mTouchPoint.x, new Point(20,mRgba.rows()-20),
+//					Core.FONT_HERSHEY_SIMPLEX, 0.3, new Scalar(255,60,60,255), 2);
+        	
+        	Core.circle(mRgba, mTouchPoint, 30, mColorData, 5);
     		mTouchEvent = false;
     	}
         
@@ -289,28 +297,45 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     }
     
     private void getHarrisCorners()
-    {
+    {    	
     	/// Detector parameters
     	int blockSize = 7;
     	int apertureSize = 5;
     	double k = 0.015;
-    	double thresh = .5;
-    	
-    	/// Detect corners
-    	Imgproc.cornerHarris( mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k );
+//    	double thresh = 0.3;
 
-		Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
+    	/// Detect corners
+    	Imgproc.cornerHarris(mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k, Imgproc.BORDER_DEFAULT);
+    
     	/// Draw a circle around corners (for illustration purposes, comment out for performance)
-    	for( int j = 0; j < mHarrisCornerMat.rows() ; j++ )
-    	{ 
-    		for( int i = 0; i < mHarrisCornerMat.cols(); i++ )
-    	    {
-    			if((mHarrisCornerMat.get(j,i))[0] > thresh || (mHarrisCornerMat.get(j,i))[0] < -1*thresh)
-    	        {
-    				Core.circle( mRgba, new Point( i, j ), 5,  new Scalar(0,255,0), 2, 8, 0 );
-    	        }
-    	    }
+//		Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+//    	for( int j = 0; j < mHarrisCornerMat.rows() ; j++ ) {
+//    		for( int i = 0; i < mHarrisCornerMat.cols(); i++ ) {
+//    			if(mHarrisCornerMat.get(j,i)[0] > thresh)
+//    	        {
+//    				Core.circle(mIntermediateMat, new Point(i,j), 5, new Scalar(0,255,0,255), 1);
+//    	        }
+//    	    }
+//    	}
+    	
+    	/// Get most prominent 4 corners
+    	Point[] corners = new Point[4];
+    	for(int i = 0; i < 4; i++) {
+    		// Find location of largest peak
+    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(mHarrisCornerMat);
+    		corners[i] = searchResult.maxLoc;
+
+    		// Zero out the area around the peak so we ignore repeats
+    		Core.circle(mHarrisCornerMat, searchResult.maxLoc, 5, new Scalar(0), -1);
     	}
+    	
+    	/// Draw circles at corners
+    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+    	for(int i = 0; i < 4; i++) {
+    		Core.circle(mIntermediateMat, corners[i], 5, new Scalar(0,255,0,255), 1);
+    	}
+    	
+    	
     }
     
     // Functions to select Bitmap from user's photos
