@@ -253,7 +253,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             
         case VIEW_MODE_CANNY:
             // input frame has gray scale format
-            Imgproc.Canny(mRgba, mIntermediateMat, 80, 100);
+            Imgproc.Canny(inputFrame.gray(), mIntermediateMat, 80, 100);
             Imgproc.cvtColor(mIntermediateMat, mRgba, Imgproc.COLOR_GRAY2RGBA, 4);
             break;
         }
