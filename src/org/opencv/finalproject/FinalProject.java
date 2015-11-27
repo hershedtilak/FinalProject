@@ -2,22 +2,27 @@ package org.opencv.finalproject;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.util.Arrays;
+
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.LoaderCallbackInterface;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
+import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.finalproject.R;
-import android.annotation.SuppressLint;
-import android.annotation.TargetApi;
+
 import android.app.Activity;
 import android.content.Intent;
 import android.graphics.Bitmap;
@@ -45,11 +50,13 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private int                    mViewMode;
     private Mat                    mRgba;
     private Mat                    mIntermediateMat;
-    private Mat					   mHarrisCornerMat;
+//    private Mat					   mHarrisCornerMat;
+    
+    private Point[]				   mCamCorners = new Point[4];
     
     private Bitmap				   mBitmap = null;
+    private Mat					   mUserImg;
     
-//    private double[]			   mColorData;
     private Scalar				   mColorData;
     private Point				   mTouchPoint;
     private Boolean				   mTouchEvent = false;
@@ -191,14 +198,14 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public void onCameraViewStarted(int width, int height) {
         mRgba = new Mat(height, width, CvType.CV_8UC4);
         mIntermediateMat = new Mat(height, width, CvType.CV_8UC4);
-        mHarrisCornerMat = new Mat(height, width, CvType.CV_32FC1);
+        //mHarrisCornerMat = new Mat(height, width, CvType.CV_32FC1);
         //mColorData = new Scalar(0,0,0,0);        
     }
 
     public void onCameraViewStopped() {
         mRgba.release();
         mIntermediateMat.release();
-        mHarrisCornerMat.release();
+        //mHarrisCornerMat.release();
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {  	
@@ -253,6 +260,81 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             
         case VIEW_MODE_RGBA:
             // input frame has RBGA format
+        	
+            if(mBitmap != null) {
+            	// Convert user image to Mat
+            	mUserImg = new Mat();
+            	Utils.bitmapToMat(mBitmap, mUserImg);
+            	
+            	// Determine organization of detected corners
+            	// First separate left and right corners
+            	int[] leftPts = new int[2];
+            	int[] rightPts = new int[2];
+            	int lCount = 0;
+    			int rCount = 0;
+
+				// Find median of x coordinates
+				double[] xCoords = {mCamCorners[0].x, mCamCorners[1].x, mCamCorners[2].x, mCamCorners[3].x};
+    			Arrays.sort(xCoords);
+    			double xMed = (xCoords[xCoords.length/2] + xCoords[xCoords.length/2-1])/2;
+    			
+    			// Compare each x coordinate to the median
+            	for(int i=0; i<4; i++) {
+            		if(mCamCorners[i].x <= xMed) {
+            			leftPts[lCount] = i;
+            			lCount += 1;
+            		}
+            		else {
+            			rightPts[rCount] = i;
+            			rCount += 1;
+            		}
+            	}
+            	
+            	// Then separate top and bottom corners
+            	int tl_idx, bl_idx, tr_idx, br_idx;
+            	if(mCamCorners[leftPts[0]].y > mCamCorners[leftPts[1]].y) {
+            		tl_idx = leftPts[1];
+            		bl_idx = leftPts[0];
+            	}
+            	else {
+            		tl_idx = leftPts[0];
+            		bl_idx = leftPts[1];
+            	}
+            	if(mCamCorners[rightPts[0]].y > mCamCorners[rightPts[1]].y) {
+            		tr_idx = rightPts[1];
+            		br_idx = rightPts[0];
+            	}
+            	else {
+            		tr_idx = rightPts[0];
+            		br_idx = rightPts[1];
+            	}
+            	
+            	// Reorganize mCamCorners
+            	Point[] orgCorners = {mCamCorners[tl_idx], mCamCorners[tr_idx], mCamCorners[br_idx], mCamCorners[bl_idx]};
+            	
+            	// Create homography matrix from user img --> camera rectangle
+            	MatOfPoint2f dest = new MatOfPoint2f(orgCorners);
+            	Point[] imgCorners = {
+        					new Point(0,0),
+        					new Point(mUserImg.rows(),0),
+            				new Point(mUserImg.rows(),mUserImg.cols()),
+							new Point(0,mUserImg.cols()) };
+            	MatOfPoint2f source = new MatOfPoint2f(imgCorners);
+            	
+            	Mat H = Calib3d.findHomography(source, dest);
+
+            	// Warp user img to camera rect
+            	Mat warpImg = new Mat();
+            	Imgproc.warpPerspective(mUserImg, warpImg, H, mRgba.size());
+            	
+            	// Generate corresponging mask
+            	Mat imgMask = new Mat();
+            	Imgproc.threshold(warpImg, imgMask, 0.1, 255, Imgproc.THRESH_BINARY);
+            	
+            	// Copy warped user image to correct location in camera img
+            	warpImg.copyTo(mRgba, imgMask);
+            }
+        	
             break;
             
         case VIEW_MODE_CANNY:
@@ -305,7 +387,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 //    	double thresh = 0.3;
 
     	/// Detect corners
-    	Imgproc.cornerHarris(mIntermediateMat, mHarrisCornerMat, blockSize, apertureSize, k, Imgproc.BORDER_DEFAULT);
+    	Mat harrisCornerMat = new Mat();
+    	Imgproc.cornerHarris(mIntermediateMat, harrisCornerMat, blockSize, apertureSize, k, Imgproc.BORDER_DEFAULT);
     
     	/// Draw a circle around corners (for illustration purposes, comment out for performance)
 //		Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
@@ -319,20 +402,19 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 //    	}
     	
     	/// Get most prominent 4 corners
-    	Point[] corners = new Point[4];
     	for(int i = 0; i < 4; i++) {
     		// Find location of largest peak
-    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(mHarrisCornerMat);
-    		corners[i] = searchResult.maxLoc;
+    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(harrisCornerMat);
+    		mCamCorners[i] = searchResult.maxLoc;
 
     		// Zero out the area around the peak so we ignore repeats
-    		Core.circle(mHarrisCornerMat, searchResult.maxLoc, 5, new Scalar(0), -1);
+    		Core.circle(harrisCornerMat, searchResult.maxLoc, 5, new Scalar(0), -1);
     	}
     	
     	/// Draw circles at corners
     	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
     	for(int i = 0; i < 4; i++) {
-    		Core.circle(mIntermediateMat, corners[i], 5, new Scalar(0,255,0,255), 1);
+    		Core.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
     	}
     	
     	
