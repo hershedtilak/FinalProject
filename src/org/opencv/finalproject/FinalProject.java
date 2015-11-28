@@ -2,7 +2,9 @@ package org.opencv.finalproject;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
@@ -13,6 +15,7 @@ import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
 import org.opencv.core.MatOfPoint2f;
 import org.opencv.core.Point;
 import org.opencv.core.Scalar;
@@ -224,16 +227,49 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         		break;
         	}
         	
-        	// Perform color thresholding (right now the threshold is hard-coded)        	
         	double thresh = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh);
-        	        	
-        	// Low Pass Filter
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
         	
-        	// Harris Corners
+        	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);        	
         	getHarrisCorners(true);
-        	        	        	        	        	
+        	        	
+        	/*
+        	// HOUGH LINES TEST 
+        	if (mColorData == null) {
+        		mViewMode = VIEW_MODE_RGBA;
+        		break;
+        	}
+        	
+        	Imgproc.GaussianBlur(mRgba, mIntermediateMat, new Size(5,5), 10.0);
+        	
+        	double thresh = 1.5;
+        	colorThreshold(mIntermediateMat, mIntermediateMat, thresh);
+        	
+        	Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
+            
+            Mat lines = new Mat();
+            int threshold = 50;
+            int minLineSize = 50;
+            int lineGap = 50;
+
+            Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+
+	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+    		for (int x = 0; x < lines.cols(); x++) {
+                  double[] vec = lines.get(0, x);
+                  double x1 = vec[0], 
+                         y1 = vec[1],
+                         x2 = vec[2],
+                         y2 = vec[3];
+                  Point start = new Point(x1, y1);
+                  Point end = new Point(x2, y2);
+                  	
+                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 3);
+            }
+            */
+    		
         	mRgba = mIntermediateMat;
             break;
             
@@ -256,8 +292,11 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	double thresh2 = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh2);
         	
+        	// Isolate the object of interest
+        	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	
         	// Get corners
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);        	
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);        	
         	getHarrisCorners(false);
         	
         	// Draw image
@@ -300,6 +339,25 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         return true;
     }
     
+    private double dist(Point p1, Point p2)
+    {
+    	double dist = Math.sqrt(Math.pow(p2.x-p1.x,2)+Math.pow(p2.y-p1.y,2));
+    	return dist;
+    }
+    
+    private Point calcIntersection(Point p1, Point p2, Point p3, Point p4)
+    {
+    	// p1 and p2 define LINE 1
+    	// p3 and p4 define LINE 2
+    	Point intersection = new Point();
+    	intersection.x = ((p1.x*p2.y - p1.y*p2.x)*(p3.x - p4.x) - (p1.x - p2.x)*(p3.x*p4.y - p3.y*p4.x)) /
+    						((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
+    	intersection.y = ((p1.x*p2.y - p1.y*p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x*p4.y - p3.y*p4.x)) /
+    						((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
+    	
+    	return intersection;
+    }
+    
     private void colorThreshold(Mat inputImg, Mat outputImg, double thresh)
     {
     	// Define 4D threshold scalars
@@ -315,6 +373,22 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	
     	// Do color thresholding on image
     	Core.inRange(inputImg, lBound, uBound, outputImg);
+    }
+    
+    private Mat isolateComponent(Mat binaryImg, Point cPoint)
+    {
+    	// Return only the connected component surrounding where the user has selected
+    	// binaryImg	: binary input image
+    	// cPoint 		: point within the connected component you want to isolate
+    	
+    	Mat floodMask = binaryImg.clone();
+    	Imgproc.copyMakeBorder(floodMask, floodMask, 1, 1, 1, 1, Imgproc.BORDER_REPLICATE);
+    	Core.bitwise_not(floodMask, floodMask);
+    	
+    	Mat floodOut = Mat.zeros(binaryImg.size(), binaryImg.type());
+    	Imgproc.floodFill(floodOut, floodMask, cPoint, new Scalar(255));
+    	
+    	return floodOut;
     }
     
     private void getHarrisCorners(boolean drawCircles)
@@ -335,7 +409,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     		mCamCorners[i] = searchResult.maxLoc;
 
     		// Zero out the area around the peak so we ignore repeats
-    		Core.circle(harrisCornerMat, searchResult.maxLoc, 5, new Scalar(0), -1);
+    		Core.circle(harrisCornerMat, searchResult.maxLoc, 10, new Scalar(0), -1);
     	}
     	
     	if(drawCircles) {
@@ -363,7 +437,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 		
 		// Compare each x coordinate to the median
     	for(int i=0; i<4; i++) {
-    		if(mCamCorners[i].x <= xMed) {
+    		if(mCamCorners[i].x <= xMed && lCount < 2) {
     			leftPts[lCount] = i;
     			lCount += 1;
     		}
@@ -458,7 +532,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         FinalProject.this.runOnUiThread(new Runnable() {
         	public void run() {
 		    	AlertDialog.Builder alertBuilder = new AlertDialog.Builder(FinalProject.this);
-		    	alertBuilder.setTitle("Error:");
+		    	alertBuilder.setTitle("Error");
 		    	
 		    	// Message dependent on specific error
 		    	switch(mErr) {
