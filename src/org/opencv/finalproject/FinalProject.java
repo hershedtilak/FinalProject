@@ -125,41 +125,37 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         // set Touch Listener
         mOpenCvCameraView.setOnTouchListener(new OnTouchListener() {
             public boolean onTouch(View v, MotionEvent event) {
-    
-            	/*
+      	
             	int action = event.getActionMasked();
             	
             	switch(action) {
             		case MotionEvent.ACTION_DOWN:
             			// Bring up Menu if user touches at bottom of screen (left of screen in portrait mode)
             			if (event.getY() > mOpenCvCameraView.getHeight() - 150.0f)
+            			{
             				FinalProject.this.openOptionsMenu();
+            			}
             			// Otherwise store value of pixel at touch location (but only if view mode is RGBA)
             			else if (mViewMode == VIEW_MODE_RGBA)
             			{
-            				int x = (int)(event.getX()*mRgba.size().width/mOpenCvCameraView.getWidth());
-            				int y = (int)(event.getY()*mRgba.size().height/mOpenCvCameraView.getHeight());
-            				mColorData = mRgba.get(y,x);
+                        	int cols = mRgba.cols();
+                            int rows = mRgba.rows();
+                      
+                            int x = (int)event.getX() * cols/mOpenCvCameraView.getWidth();
+                            int y = (int)event.getY() * rows/mOpenCvCameraView.getHeight();
+                            
+                            if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
+                            else {
+                            	mTouchPoint = new Point(x,y);
+                            	mTouchEvent = true;
+                            	return true;
+                            }
             			}
             			break;
             	}
-				*/
-            	
-            	int cols = mRgba.cols();
-                int rows = mRgba.rows();
+				
+            	return true;
 
-//                int xOffset = (mOpenCvCameraView.getWidth() - cols) / 2;
-//                int yOffset = (mOpenCvCameraView.getHeight() - rows) / 2;
-                
-                int x = (int)event.getX() * cols/mOpenCvCameraView.getWidth();
-                int y = (int)event.getY() * rows/mOpenCvCameraView.getHeight();
-                
-                if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
-                else {
-                	mTouchPoint = new Point(x,y);
-                	mTouchEvent = true;
-                	return true;
-                }
             }
         });
     }
@@ -188,8 +184,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, this, mLoaderCallback);
-            //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+            //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, this, mLoaderCallback);
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
@@ -215,6 +211,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {  	
     	final int viewMode = mViewMode;
         mRgba = inputFrame.rgba();
+        Mat element = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(20,20));
         
     	// Set color upon user selection
     	if(mTouchEvent)	mColorData = new Scalar(mRgba.get((int)mTouchPoint.y, (int)mTouchPoint.x));
@@ -226,13 +223,16 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         		mViewMode = VIEW_MODE_RGBA;
         		break;
         	}
-        	
+        	        	
         	double thresh = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh);
-        	
+        		
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
+        	        	
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);  
         	
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);        	
         	getHarrisCorners(true);
         	        	
         	/*
@@ -292,11 +292,16 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	double thresh2 = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh2);
         	
-        	// Isolate the object of interest
-        	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	// Small Region Removal
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
         	
-        	// Get corners
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);        	
+        	// Isolate the object of interest
+        	//mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	
+        	// Low Pass Filter
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);   
+        	
+        	// Get corners   	
         	getHarrisCorners(false);
         	
         	// Draw image
@@ -311,7 +316,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 //        	Core.putText(mRgba, mTouchPoint.y + " x " + mTouchPoint.x, new Point(20,mRgba.rows()-20),
 //					Core.FONT_HERSHEY_SIMPLEX, 0.3, new Scalar(255,60,60,255), 2);
         	
-        	Core.circle(mRgba, mTouchPoint, 30, mColorData, 5);
+        	Imgproc.circle(mRgba, mTouchPoint, 30, mColorData, 5);
     		mTouchEvent = false;
     	}
         
@@ -382,7 +387,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	// cPoint 		: point within the connected component you want to isolate
     	
     	Mat floodMask = binaryImg.clone();
-    	Imgproc.copyMakeBorder(floodMask, floodMask, 1, 1, 1, 1, Imgproc.BORDER_REPLICATE);
+    	Core.copyMakeBorder(floodMask, floodMask, 1, 1, 1, 1, Core.BORDER_REPLICATE);
     	Core.bitwise_not(floodMask, floodMask);
     	
     	Mat floodOut = Mat.zeros(binaryImg.size(), binaryImg.type());
@@ -400,7 +405,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
     	// Detect corners
     	Mat harrisCornerMat = new Mat();
-    	Imgproc.cornerHarris(mIntermediateMat, harrisCornerMat, blockSize, apertureSize, k, Imgproc.BORDER_DEFAULT);
+    	Imgproc.cornerHarris(mIntermediateMat, harrisCornerMat, blockSize, apertureSize, k, Core.BORDER_DEFAULT);
         	
     	// Get most prominent 4 corners
     	for(int i = 0; i < 4; i++) {
@@ -409,14 +414,14 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     		mCamCorners[i] = searchResult.maxLoc;
 
     		// Zero out the area around the peak so we ignore repeats
-    		Core.circle(harrisCornerMat, searchResult.maxLoc, 10, new Scalar(0), -1);
+    		Imgproc.circle(harrisCornerMat, searchResult.maxLoc, 10, new Scalar(0), -1);
     	}
     	
     	if(drawCircles) {
 	    	// Draw circles at corners
 	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
 	    	for(int i = 0; i < 4; i++) {
-	    		Core.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
+	    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
 	    	}
     	}
     }
@@ -479,7 +484,11 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	MatOfPoint2f source = new MatOfPoint2f(imgCorners);
     	
     	Mat H = Calib3d.findHomography(source, dest);
-
+    	
+    	// don't do anything if there isn't a valid homogrophy returned by the findHomography function
+    	if(H.empty())
+    		return;
+    	
     	// Warp user img to camera roi
     	Mat warpImg = new Mat();
     	Imgproc.warpPerspective(inputImg, warpImg, H, mRgba.size());
