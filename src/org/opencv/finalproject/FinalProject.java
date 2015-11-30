@@ -136,7 +136,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             				FinalProject.this.openOptionsMenu();
             			}
             			// Otherwise store value of pixel at touch location (but only if view mode is RGBA)
-            			else if (mViewMode == VIEW_MODE_RGBA)
+            			else if (mViewMode == VIEW_MODE_RGBA || mViewMode == VIEW_MODE_ALL_PROCESSING)
             			{
                         	int cols = mRgba.cols();
                             int rows = mRgba.rows();
@@ -211,8 +211,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {  	
     	final int viewMode = mViewMode;
         mRgba = inputFrame.rgba();
-        Mat element = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(20,20));
-        
+        Mat el_dilate1 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
+        Mat el_erode = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10,10));
+        Mat el_dilate2 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10,10));
+
     	// Set color upon user selection
     	if(mTouchEvent)	mColorData = new Scalar(mRgba.get((int)mTouchPoint.y, (int)mTouchPoint.x));
         
@@ -227,52 +229,162 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	double thresh = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh);
         		
-        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
-        	        	
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate1);
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_ERODE, el_erode);
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate2);
+
+        	
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
 
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);  
-        	
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 10.0);  
+        	        	
         	getHarrisCorners(true);
         	
         	// update touchpoint
         	updateTouchPoint();
         	        	
-        	/*
-        	// HOUGH LINES TEST 
-        	if (mColorData == null) {
-        		mViewMode = VIEW_MODE_RGBA;
-        		break;
-        	}
         	
-        	Imgproc.GaussianBlur(mRgba, mIntermediateMat, new Size(5,5), 10.0);
-        	
-        	double thresh = 1.5;
-        	colorThreshold(mIntermediateMat, mIntermediateMat, thresh);
-        	
-        	Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
-            
-            Mat lines = new Mat();
-            int threshold = 50;
-            int minLineSize = 50;
-            int lineGap = 50;
+//        	// HOUGH LINES TEST 
+//        	if (mColorData == null) {
+//        		mViewMode = VIEW_MODE_RGBA;
+//        		break;
+//        	}
+//        	
+//        	Imgproc.GaussianBlur(mRgba, mIntermediateMat, new Size(5,5), 20.0);
+//        	
+//        	double thresh = 1.5;
+//        	colorThreshold(mIntermediateMat, mIntermediateMat, thresh);
+//        	
+//        	Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
+//            
+//            Mat lines = new Mat();
+//            int threshold = 50;
+//            int minLineSize = 50;
+//            int lineGap = 50;
+//
+//            Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+//
+//            boolean drawLines = true;
+//            if(drawLines) {
+//		    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+//	    		for (int x = 0; x < lines.cols(); x++) {
+//	                  double[] vec = lines.get(0, x);
+//	                  double x1 = vec[0], 
+//	                         y1 = vec[1],
+//	                         x2 = vec[2],
+//	                         y2 = vec[3];
+//	                  Point start = new Point(x1, y1);
+//	                  Point end = new Point(x2, y2);
+//	                  	
+//	                  Imgproc.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
+//	            }
+//            }
 
-            Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
-
-	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
-    		for (int x = 0; x < lines.cols(); x++) {
-                  double[] vec = lines.get(0, x);
-                  double x1 = vec[0], 
-                         y1 = vec[1],
-                         x2 = vec[2],
-                         y2 = vec[3];
-                  Point start = new Point(x1, y1);
-                  Point end = new Point(x2, y2);
-                  	
-                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 3);
-            }
-            */
-    		
+//            // calculate line lengths
+//            double[] len = new double[lines.cols()];
+//            for (int i = 0; i < lines.cols(); i++) {
+//            	double[] vec = lines.get(0, i);
+//            	double x1 = vec[0], 
+//            		   y1 = vec[1],
+//                       x2 = vec[2],
+//                       y2 = vec[3];
+//                Point start = new Point(x1, y1);
+//                Point end = new Point(x2, y2);
+//                
+//                len[i] = dist(start, end);
+//            }
+//            
+//    		// calculate intersections
+//            Point[][] isxPts = new Point[lines.cols()][lines.cols()];
+//            //double[][] isxWeights = new double[lines.cols()][lines.cols()];
+//            Mat isxWeights = new Mat(lines.cols(), lines.cols(), CvType.CV_32FC1);
+//    		for (int i = 0; i < lines.cols(); i++) {
+//    			
+//            	double[] vec_1 = lines.get(0, i);
+//            	double x1_1 = vec_1[0], 
+//            		   y1_1 = vec_1[1],
+//                       x2_1 = vec_1[2],
+//                       y2_1 = vec_1[3];
+//                Point start_1 = new Point(x1_1, y1_1);
+//                Point end_1 = new Point(x2_1, y2_1);
+//    			
+//            	for (int j = 0; j < lines.cols(); j++) {
+//            		
+//                	double[] vec_2 = lines.get(0, j);
+//                	double x1_2 = vec_2[0], 
+//                		   y1_2 = vec_2[1],
+//                           x2_2 = vec_2[2],
+//                           y2_2 = vec_2[3];
+//                    Point start_2 = new Point(x1_2, y1_2);
+//                    Point end_2 = new Point(x2_2, y2_2);
+//                    
+//                    isxPts[i][j] = calcIntersection(start_1, end_1, start_2, end_2);
+//                    //System.out.println("isxPt = " + isxPts[i][j].x + ", " + isxPts[i][j].y);
+//                    
+//                    double minDist;
+//                    if(isxPts[i][j].x == Double.NaN || isxPts[i][j].y == Double.NaN) {
+//                    	minDist = 10000;
+//                    }
+//                    else {
+//                    	double[] endPtDists = new double[4];
+//	                    endPtDists[0] = dist(start_1, isxPts[i][j]);
+//	                    endPtDists[1] = dist(end_1,   isxPts[i][j]);
+//	                    endPtDists[2] = dist(start_2, isxPts[i][j]);
+//	                    endPtDists[3] = dist(end_2,   isxPts[i][j]);
+//	                    
+//	                    minDist = Math.min( Math.min(endPtDists[0], endPtDists[1]) , Math.min(endPtDists[2], endPtDists[3]) );
+//                    }
+//                    
+//                    isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
+//                    //isxWeights[i][j] = Math.sqrt(len[i] * len[j]) + (1/minDist);
+//            	}
+//            }
+//    		
+//    		/*
+//    		// find intersection points with max weightings
+//        	for(int i = 0; i < 4; i++) {
+//        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+//        		Point maxWeightIdx = searchResult.maxLoc;
+//        		
+//        		mCamCorners[i] = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+//        		System.out.println(mCamCorners[i].x + ", " + mCamCorners[i].y);
+//        		
+//        		// Zero out the this peak so we avoid repeats
+//        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+//        	}
+//    		*/
+//    		
+//        	int isxCounter = 0;
+//        	while (isxCounter < 4) {
+//        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+//        		Point maxWeightIdx = searchResult.maxLoc;
+//        		
+//        		Point isxPt = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+//        		boolean isClose = false;
+//        		for(int i = 0; i < isxCounter; i++) {
+//        			if(Math.abs(isxPt.x - mCamCorners[i].x) <= 10 ||
+//        					Math.abs(isxPt.y - mCamCorners[i].y) <= 10)
+//        				isClose = true;
+//        		}
+//        		
+//        		if(!isClose) {
+//        			mCamCorners[isxCounter] = isxPt;
+//        			isxCounter++;
+//        		}
+//        		
+//        		// Zero out the this peak so we avoid repeats
+//        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+//        		
+//        		if(isxCounter == lines.cols()*lines.cols())
+//        			break;
+//        	}
+//        	
+//	    	// Draw circles at corners
+//	    	//Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+//	    	for(int i = 0; i < 4; i++) {
+//	    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
+//	    	}
+        	
         	mRgba = mIntermediateMat;
             break;
             
@@ -296,7 +408,9 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	colorThreshold(mRgba, mIntermediateMat, thresh2);
         	
         	// Small Region Removal
-        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate1);
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_ERODE, el_erode);
+        	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate2);
         	
         	// Isolate the object of interest
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
@@ -354,31 +468,42 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     {
 		double[] xCoords = {mCamCorners[0].x, mCamCorners[1].x, mCamCorners[2].x, mCamCorners[3].x};
 		Arrays.sort(xCoords);
-		mTouchPoint.x = (xCoords[0] + xCoords[xCoords.length-1])/2;
+		double xMed = (xCoords[0] + xCoords[xCoords.length-1])/2;
+		double xDist = xCoords[xCoords.length-1] - xCoords[0];
+		if(xMed - mTouchPoint.x < xDist && xMed - mTouchPoint.x > -1*xDist)
+			mTouchPoint.x = (xCoords[0] + xCoords[xCoords.length-1])/2;
     	
 		double[] yCoords = {mCamCorners[0].y, mCamCorners[1].y, mCamCorners[2].y, mCamCorners[3].y};
 		Arrays.sort(yCoords);
-		mTouchPoint.y = (yCoords[0] + yCoords[yCoords.length-1])/2;
+		double yMed = (yCoords[0] + yCoords[yCoords.length-1])/2;
+		double yDist = yCoords[yCoords.length-1] - yCoords[0];
+		if(yMed - mTouchPoint.y < yDist && yMed - mTouchPoint.y > -1*yDist)
+			mTouchPoint.y = (yCoords[0] + yCoords[yCoords.length-1])/2;
     }
     
     
     private double dist(Point p1, Point p2)
     {
-    	double dist = Math.sqrt(Math.pow(p2.x-p1.x,2)+Math.pow(p2.y-p1.y,2));
-    	return dist;
+    	double distance = Math.sqrt(Math.pow(p2.x-p1.x,2) + Math.pow(p2.y-p1.y,2));
+    	return distance;
     }
     
     private Point calcIntersection(Point p1, Point p2, Point p3, Point p4)
     {
     	// p1 and p2 define LINE 1
     	// p3 and p4 define LINE 2
-    	Point intersection = new Point();
-    	intersection.x = ((p1.x*p2.y - p1.y*p2.x)*(p3.x - p4.x) - (p1.x - p2.x)*(p3.x*p4.y - p3.y*p4.x)) /
-    						((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
-    	intersection.y = ((p1.x*p2.y - p1.y*p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x*p4.y - p3.y*p4.x)) /
-    						((p1.x - p2.x)*(p3.y - p4.y) - (p1.y - p2.y)*(p3.x - p4.x));
     	
-    	return intersection;
+    	double l1_m = (p2.y - p1.y) / (p2.x - p1.x);
+    	double l2_m = (p4.y - p3.y) / (p4.x - p3.x);
+    	
+    	double l1_b = p1.y - l1_m * p1.x;
+    	double l2_b = p3.y - l2_m * p3.x;
+
+    	Point isx = new Point();
+    	isx.x = (l2_b - l1_b) / (l1_m - l2_m);
+    	isx.y = (l1_m*l2_b - l2_m*l1_b) / (l1_m - l2_m);
+    	
+    	return isx;
     }
     
     private void colorThreshold(Mat inputImg, Mat outputImg, double thresh)
