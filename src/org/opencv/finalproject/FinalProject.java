@@ -234,6 +234,9 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);  
         	
         	getHarrisCorners(true);
+        	
+        	// update touchpoint
+        	updateTouchPoint();
         	        	
         	/*
         	// HOUGH LINES TEST 
@@ -296,7 +299,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
         	
         	// Isolate the object of interest
-        	//mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
         	
         	// Low Pass Filter
         	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);   
@@ -306,6 +309,9 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	
         	// Draw image
         	drawWarpedImg(mUserImg);
+        	
+        	// update touchpoint
+        	updateTouchPoint();
         	
             break;
         }
@@ -343,6 +349,18 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
         return true;
     }
+    
+    private void updateTouchPoint()
+    {
+		double[] xCoords = {mCamCorners[0].x, mCamCorners[1].x, mCamCorners[2].x, mCamCorners[3].x};
+		Arrays.sort(xCoords);
+		mTouchPoint.x = (xCoords[0] + xCoords[xCoords.length-1])/2;
+    	
+		double[] yCoords = {mCamCorners[0].y, mCamCorners[1].y, mCamCorners[2].y, mCamCorners[3].y};
+		Arrays.sort(yCoords);
+		mTouchPoint.y = (yCoords[0] + yCoords[yCoords.length-1])/2;
+    }
+    
     
     private double dist(Point p1, Point p2)
     {
