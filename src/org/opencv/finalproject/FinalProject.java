@@ -4,6 +4,7 @@ import java.io.FileDescriptor;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import org.opencv.android.BaseLoaderCallback;
@@ -59,6 +60,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private Mat                    mIntermediateMat;
     
     private Point[]				   mCamCorners = new Point[4];
+    private boolean				   mFoundCorners = false;
     
     private Bitmap				   mBitmap = null;
     private Mat					   mUserImg;
@@ -124,6 +126,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         
         // set Touch Listener
         mOpenCvCameraView.setOnTouchListener(new OnTouchListener() {
+<<<<<<< HEAD
             public boolean onTouch(View v, MotionEvent event) {
       	
             	int action = event.getActionMasked();
@@ -155,7 +158,25 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             	}
 				
             	return true;
+=======
+            public boolean onTouch(View v, MotionEvent event)
+            {
+            	int cols = mRgba.cols();
+                int rows = mRgba.rows();
+>>>>>>> 2b010d1e4344744a39e34c06648063bf0e90d7ba
 
+//                int xOffset = (mOpenCvCameraView.getWidth() - cols) / 2;
+//                int yOffset = (mOpenCvCameraView.getHeight() - rows) / 2;
+                
+                int x = (int)event.getX() * cols/mOpenCvCameraView.getWidth();
+                int y = (int)event.getY() * rows/mOpenCvCameraView.getHeight();
+                
+                if ((x < 0) || (y < 0) || (x > cols) || (y > rows)) return false;
+                else {
+                	mTouchPoint = new Point(x,y);
+                	mTouchEvent = true;
+                	return true;
+                }
             }
         });
     }
@@ -184,8 +205,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         super.onResume();
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
-            //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, this, mLoaderCallback);
-            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+            OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_2_4_11, this, mLoaderCallback);
+            //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
         } else {
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
@@ -211,10 +232,16 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {  	
     	final int viewMode = mViewMode;
         mRgba = inputFrame.rgba();
+<<<<<<< HEAD
         Mat el_dilate1 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(5,5));
         Mat el_erode = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10,10));
         Mat el_dilate2 = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(10,10));
 
+=======
+        
+        //Mat element = Imgproc.getStructuringElement(Imgproc.MORPH_RECT, new Size(20,20));
+        
+>>>>>>> 2b010d1e4344744a39e34c06648063bf0e90d7ba
     	// Set color upon user selection
     	if(mTouchEvent)	mColorData = new Scalar(mRgba.get((int)mTouchPoint.y, (int)mTouchPoint.x));
         
@@ -225,9 +252,11 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         		mViewMode = VIEW_MODE_RGBA;
         		break;
         	}
-        	        	
+        	
+        	// Color threshold
         	double thresh = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh);
+<<<<<<< HEAD
         		
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate1);
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_ERODE, el_erode);
@@ -385,6 +414,164 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 //	    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
 //	    	}
         	
+=======
+        	
+        	//Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
+        	
+        	// Isolate the object of interest
+        	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
+        	
+        	// Get corners
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);        	
+        	getHarrisCorners(true);
+        	
+        	/*
+        	// HOUGH LINES TEST 
+        	if (mColorData == null) {
+        		mViewMode = VIEW_MODE_RGBA;
+        		break;
+        	}
+        	
+        	Imgproc.GaussianBlur(mRgba, mIntermediateMat, new Size(5,5), 20.0);
+        	
+        	double thresh = 1.5;
+        	colorThreshold(mIntermediateMat, mIntermediateMat, thresh);
+        	
+        	Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
+            
+            Mat lines = new Mat();
+            int threshold = 50;
+            int minLineSize = 50;
+            int lineGap = 50;
+
+            Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+
+            boolean drawLines = true;
+            if(drawLines) {
+		    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+	    		for (int x = 0; x < lines.cols(); x++) {
+	                  double[] vec = lines.get(0, x);
+	                  double x1 = vec[0], 
+	                         y1 = vec[1],
+	                         x2 = vec[2],
+	                         y2 = vec[3];
+	                  Point start = new Point(x1, y1);
+	                  Point end = new Point(x2, y2);
+	                  	
+	                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
+	            }
+            }
+			*/
+
+            /*
+            // calculate line lengths
+            double[] len = new double[lines.cols()];
+            for (int i = 0; i < lines.cols(); i++) {
+            	double[] vec = lines.get(0, i);
+            	double x1 = vec[0], 
+            		   y1 = vec[1],
+                       x2 = vec[2],
+                       y2 = vec[3];
+                Point start = new Point(x1, y1);
+                Point end = new Point(x2, y2);
+                
+                len[i] = dist(start, end);
+            }
+            
+    		// calculate intersections
+            Point[][] isxPts = new Point[lines.cols()][lines.cols()];
+            //double[][] isxWeights = new double[lines.cols()][lines.cols()];
+            Mat isxWeights = new Mat(lines.cols(), lines.cols(), CvType.CV_32FC1);
+    		for (int i = 0; i < lines.cols(); i++) {
+    			
+            	double[] vec_1 = lines.get(0, i);
+            	double x1_1 = vec_1[0], 
+            		   y1_1 = vec_1[1],
+                       x2_1 = vec_1[2],
+                       y2_1 = vec_1[3];
+                Point start_1 = new Point(x1_1, y1_1);
+                Point end_1 = new Point(x2_1, y2_1);
+    			
+            	for (int j = 0; j < lines.cols(); j++) {
+            		
+                	double[] vec_2 = lines.get(0, j);
+                	double x1_2 = vec_2[0], 
+                		   y1_2 = vec_2[1],
+                           x2_2 = vec_2[2],
+                           y2_2 = vec_2[3];
+                    Point start_2 = new Point(x1_2, y1_2);
+                    Point end_2 = new Point(x2_2, y2_2);
+                    
+                    isxPts[i][j] = calcIntersection(start_1, end_1, start_2, end_2);
+                    //System.out.println("isxPt = " + isxPts[i][j].x + ", " + isxPts[i][j].y);
+                    
+                    double minDist;
+                    if(isxPts[i][j].x == Double.NaN || isxPts[i][j].y == Double.NaN) {
+                    	minDist = 10000;
+                    }
+                    else {
+                    	double[] endPtDists = new double[4];
+	                    endPtDists[0] = dist(start_1, isxPts[i][j]);
+	                    endPtDists[1] = dist(end_1,   isxPts[i][j]);
+	                    endPtDists[2] = dist(start_2, isxPts[i][j]);
+	                    endPtDists[3] = dist(end_2,   isxPts[i][j]);
+	                    
+	                    minDist = Math.min( Math.min(endPtDists[0], endPtDists[1]) , Math.min(endPtDists[2], endPtDists[3]) );
+                    }
+                    
+                    isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
+                    //isxWeights[i][j] = Math.sqrt(len[i] * len[j]) + (1/minDist);
+            	}
+            }
+    		
+    	
+//    		// find intersection points with max weightings
+//        	for(int i = 0; i < 4; i++) {
+//        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+//        		Point maxWeightIdx = searchResult.maxLoc;
+//        		
+//        		mCamCorners[i] = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+//        		System.out.println(mCamCorners[i].x + ", " + mCamCorners[i].y);
+//        		
+//        		// Zero out the this peak so we avoid repeats
+//        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+//        	}
+    	
+    		
+        	int isxCounter = 0;
+        	while (isxCounter < 4) {
+        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+        		Point maxWeightIdx = searchResult.maxLoc;
+        		
+        		Point isxPt = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+        		boolean isClose = false;
+        		for(int i = 0; i < isxCounter; i++) {
+        			if(Math.abs(isxPt.x - mCamCorners[i].x) <= 10 ||
+        					Math.abs(isxPt.y - mCamCorners[i].y) <= 10)
+        				isClose = true;
+        		}
+        		
+        		if(!isClose) {
+        			mCamCorners[isxCounter] = isxPt;
+        			isxCounter++;
+        		}
+        		
+        		// Zero out the this peak so we avoid repeats
+        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+        		
+        		if(isxCounter == lines.cols()*lines.cols())
+        			break;
+        	}
+        	
+	    	// Draw circles at corners
+	    	//Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+	    	for(int i = 0; i < 4; i++) {
+	    		Core.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
+	    	}
+        	*/
+
+            
+>>>>>>> 2b010d1e4344744a39e34c06648063bf0e90d7ba
         	mRgba = mIntermediateMat;
             break;
             
@@ -408,37 +595,39 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	colorThreshold(mRgba, mIntermediateMat, thresh2);
         	
         	// Small Region Removal
+<<<<<<< HEAD
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate1);
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_ERODE, el_erode);
         	Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_DILATE, el_dilate2);
+=======
+        	//Imgproc.morphologyEx(mIntermediateMat, mIntermediateMat, Imgproc.MORPH_CLOSE, element);
+>>>>>>> 2b010d1e4344744a39e34c06648063bf0e90d7ba
         	
         	// Isolate the object of interest
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
         	
-        	// Low Pass Filter
-        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);   
+        	// Low-pass filter
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);
         	
-        	// Get corners   	
+        	// Get corners
         	getHarrisCorners(false);
         	
         	// Draw image
         	drawWarpedImg(mUserImg);
-        	
-        	// update touchpoint
-        	updateTouchPoint();
-        	
+            
             break;
         }
 
-    	// Draw color circle where user touched screen 
-        if(mTouchEvent) {        	
-//        	// Can draw the coordinates to screen for debugging purposes
-//        	Core.putText(mRgba, mTouchPoint.y + " x " + mTouchPoint.x, new Point(20,mRgba.rows()-20),
-//					Core.FONT_HERSHEY_SIMPLEX, 0.3, new Scalar(255,60,60,255), 2);
-        	
-        	Imgproc.circle(mRgba, mTouchPoint, 30, mColorData, 5);
+        if(mTouchEvent) {
+        	// Draw color circle where user touched screen 
+        	Core.circle(mRgba, mTouchPoint, 30, mColorData, 5);
     		mTouchEvent = false;
     	}
+        else {
+        	// If we've detected the corners of our subject, we can
+        	// refine user point selection based on corner locations
+        	if (mFoundCorners) updateTouchPoint();
+        }
         
         return mRgba;
     }
@@ -480,7 +669,6 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 		if(yMed - mTouchPoint.y < yDist && yMed - mTouchPoint.y > -1*yDist)
 			mTouchPoint.y = (yCoords[0] + yCoords[yCoords.length-1])/2;
     }
-    
     
     private double dist(Point p1, Point p2)
     {
@@ -530,7 +718,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	// cPoint 		: point within the connected component you want to isolate
     	
     	Mat floodMask = binaryImg.clone();
-    	Core.copyMakeBorder(floodMask, floodMask, 1, 1, 1, 1, Core.BORDER_REPLICATE);
+    	Imgproc.copyMakeBorder(floodMask, floodMask, 1, 1, 1, 1, Imgproc.BORDER_REPLICATE);
     	Core.bitwise_not(floodMask, floodMask);
     	
     	Mat floodOut = Mat.zeros(binaryImg.size(), binaryImg.type());
@@ -548,7 +736,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
     	// Detect corners
     	Mat harrisCornerMat = new Mat();
-    	Imgproc.cornerHarris(mIntermediateMat, harrisCornerMat, blockSize, apertureSize, k, Core.BORDER_DEFAULT);
+    	Imgproc.cornerHarris(mIntermediateMat, harrisCornerMat, blockSize, apertureSize, k, Imgproc.BORDER_DEFAULT);
         	
     	// Get most prominent 4 corners
     	for(int i = 0; i < 4; i++) {
@@ -557,14 +745,17 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     		mCamCorners[i] = searchResult.maxLoc;
 
     		// Zero out the area around the peak so we ignore repeats
-    		Imgproc.circle(harrisCornerMat, searchResult.maxLoc, 10, new Scalar(0), -1);
+    		Core.circle(harrisCornerMat, searchResult.maxLoc, 10, new Scalar(0), -1);
     	}
+    	
+    	// Set flag that says we've found the corners
+    	mFoundCorners = true;
     	
     	if(drawCircles) {
 	    	// Draw circles at corners
 	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
 	    	for(int i = 0; i < 4; i++) {
-	    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
+	    		Core.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
 	    	}
     	}
     }
@@ -627,8 +818,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	MatOfPoint2f source = new MatOfPoint2f(imgCorners);
     	
     	Mat H = Calib3d.findHomography(source, dest);
-    	
-    	// don't do anything if there isn't a valid homogrophy returned by the findHomography function
+
+    	// don't do anything if there isn't a valid homography returned by the findHomography function
     	if(H.empty())
     		return;
     	
