@@ -283,6 +283,9 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         		break;
         	}
         	
+        	// Pre-process userImg according to lighting in scene
+        	mUserImg = sbmColorCorrection(mUserImg);
+        	
         	// Color threshold
         	double thresh2 = 1.5;
         	colorThreshold(mRgba, mIntermediateMat, thresh2);
@@ -340,6 +343,42 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
 
         return true;
     }
+    
+    private Mat sbmColorCorrection(Mat img) {
+    	int rows = img.rows();
+    	int cols = img.cols();
+    	int chan = img.channels();
+    	if(chan != 3) return img; // make sure we have an RGB color img
+    	
+    	Mat result = new Mat(new Size(rows,cols), CvType.CV_8UC3);
+    		
+    	List<Mat> sChannels = new ArrayList<Mat>();
+		Core.split(mRgba, sChannels);
+		
+		// Find max color values in each channel of camImg
+		double[] maxColorVal = new double[3];
+		for(int c = 0; c < 3; c++) {
+    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(sChannels.get(c));
+    		maxColorVal[c] = searchResult.maxVal;
+		}
+
+		// Balance userImg accordingly
+		for(int i = 0; i < rows; i++) {
+			for(int j = 0; j < cols; j++) {
+				double[] px = new double[3];
+				img.get(i,j,px);
+				
+				double[] newPx = new double[3];
+				for(int c = 0; c < 3; c++) {
+					newPx[c] = px[c] * (1/maxColorVal[c]);
+				}
+				
+				result.put(i,j,newPx);
+			}
+		}
+		
+    	return result;
+	}
     
     private void contourCornerDetection()
     {
