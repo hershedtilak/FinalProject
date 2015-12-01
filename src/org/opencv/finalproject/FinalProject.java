@@ -284,7 +284,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	}
         	
         	// Pre-process userImg according to lighting in scene
-        	mUserImg = sbmColorCorrection(mUserImg);
+        	Mat ccUserImg = sbmColorCorrection(mUserImg);
         	
         	// Color threshold
         	double thresh2 = 1.5;
@@ -300,11 +300,11 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);
         	
         	// Get corners
-        	// getHarrisCorners(false);
-        	contourCornerDetection();
+        	getHarrisCorners(false);
+        	//contourCornerDetection();
         	
         	// Draw image
-        	drawWarpedImg(mUserImg);
+        	drawWarpedImg(ccUserImg);
             
             break;
         }
@@ -345,12 +345,13 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     }
     
     private Mat sbmColorCorrection(Mat img) {
+    	// scale-by-max color correction for 4-channel image
     	int rows = img.rows();
     	int cols = img.cols();
     	int chan = img.channels();
-    	if(chan != 3) return img; // make sure we have an RGB color img
+    	if(chan != 4) return img; // make sure we have an RGBA color img
     	
-    	Mat result = new Mat(new Size(rows,cols), CvType.CV_8UC3);
+    	Mat result = new Mat(new Size(rows,cols), CvType.CV_8UC4);
     		
     	List<Mat> sChannels = new ArrayList<Mat>();
 		Core.split(mRgba, sChannels);
@@ -362,20 +363,10 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     		maxColorVal[c] = searchResult.maxVal;
 		}
 
-		// Balance userImg accordingly
-		for(int i = 0; i < rows; i++) {
-			for(int j = 0; j < cols; j++) {
-				double[] px = new double[3];
-				img.get(i,j,px);
-				
-				double[] newPx = new double[3];
-				for(int c = 0; c < 3; c++) {
-					newPx[c] = px[c] * (1/maxColorVal[c]);
-				}
-				
-				result.put(i,j,newPx);
-			}
-		}
+		// Balance img accordingly
+		Core.multiply(img, new Scalar(255/maxColorVal[0],
+									  255/maxColorVal[1],
+									  255/maxColorVal[2], 1), result, 1);
 		
     	return result;
 	}
@@ -968,7 +959,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     	
     	// Warp user img to camera roi
     	Mat warpImg = new Mat();
-    	Imgproc.warpPerspective(inputImg, warpImg, H, mRgba.size());
+    	//Imgproc.warpPerspective(inputImg, warpImg, H, mRgba.size());
+    	Imgproc.warpPerspective(inputImg, warpImg, H, mRgba.size(), Imgproc.INTER_LINEAR);
     	
     	// Generate corresponding mask
     	Mat imgMask = new Mat();
