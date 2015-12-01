@@ -70,7 +70,7 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
     private Point				   mTouchPoint;
     private Boolean				   mTouchEvent = false;
 
-    private int					   mFrameCounter = 0;
+    private int					   mDroppedFrameCounter = 0;
     private int					   mErr;
     
     private MenuItem               mItemPreviewRGBA;
@@ -251,432 +251,15 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
             //	3 : Hough lines + weighted intersections method
             //	4 : Hough lines + max X,Y method
             
-            if(METHOD == 1)
-            {
-            	// Lowpass filter
-            	//Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);
-            	
-            	// Find contours
-            	List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
-            	Imgproc.findContours(mIntermediateMat, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
-            	            	
-            	// Try to find rectangular contour
-            	MatOfPoint2f rectApproxCurve = new MatOfPoint2f();
-            	for(int i = 0; i < contours.size(); i++) {
-	            	// For each contour found in the image...
-            		MatOfPoint contour = contours.get(i);
-	            	MatOfPoint2f contour2f = new MatOfPoint2f( contour.toArray() );
-	            	
-	            	// Get approx curve
-	            	MatOfPoint2f approxCurve = new MatOfPoint2f();
-	            	Imgproc.approxPolyDP(contour2f, approxCurve, ((int)contour.total())*0.05, true);
-	            	
-	            	// If the approx curve has 4 points, it's a rectangle
-	              	if(approxCurve.total() == 4) {
-              			rectApproxCurve = approxCurve;
-	            	}
-            	}
-            	
-            	// If rectangle curve found, get it's corners
-            	if(rectApproxCurve.total() == 0) {
-            		// mFoundCorners = false;
-            		// Don't need to change state of mFoundCorners:
-            		//		--> if it was true, we'll just use old corners
-            		//		-->	if it was false, we'll continue not showing corners
-            		// (assuming this only last's about a frame)
-            	}
-            	else {
-            		for(int c = 0; c < 4; c++) {
-            			double[] p = rectApproxCurve.get(c,0);
-            			mCamCorners[c] = new Point(p[0],p[1]);
-            			mFoundCorners = true;
-            		}
-            	}
-            }
-            
-            if(METHOD == 2)
-            {
-            	// Detect Hough lines
-                Mat lines = new Mat();
-                int threshold = 40;
-                int minLineSize = 30;
-                int lineGap = 40;
-
-                Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
-
-            	// Draw lines to screen
-                boolean drawLines = true;
-                if(drawLines) {
-    		    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
-    	    		for (int x = 0; x < lines.cols(); x++) {
-    	                  double[] vec = lines.get(0, x);
-    	                  double x1 = vec[0], 
-    	                         y1 = vec[1],
-    	                         x2 = vec[2],
-    	                         y2 = vec[3];
-    	                  Point start = new Point(x1, y1);
-    	                  Point end = new Point(x2, y2);
-    	                  	
-    	                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
-    	            }
-                }
-                
-	    		// Calculate intersections
-	            ArrayList<Point> isxPts  = new ArrayList<Point>();
-	            for (int i = 0; i < lines.cols(); i++) {
-	    			
-	            	double[] vec_1 = lines.get(0, i);
-	            	double x1_1 = vec_1[0], 
-	            		   y1_1 = vec_1[1],
-	                       x2_1 = vec_1[2],
-	                       y2_1 = vec_1[3];
-	                Point start_1 = new Point(x1_1, y1_1);
-	                Point end_1 = new Point(x2_1, y2_1);
-	    			
-	            	for (int j = 0; j < lines.cols(); j++) {
-	            		
-	                	double[] vec_2 = lines.get(0, j);
-	                	double x1_2 = vec_2[0], 
-	                		   y1_2 = vec_2[1],
-	                           x2_2 = vec_2[2],
-	                           y2_2 = vec_2[3];
-	                    Point start_2 = new Point(x1_2, y1_2);
-	                    Point end_2 = new Point(x2_2, y2_2);
-	                    
-	                    // Calculate intersection point for every pair of lines
-	                    Point isx = calcIntersection(start_1, end_1, start_2, end_2);
-	                    
-	                    // Make sure it's within a reasonable area
-	                    double tolerance = 100;
-	                    if (isx.x > -tolerance && isx.x < mIntermediateMat.cols()+tolerance &&
-	                    		isx.y > -tolerance && isx.y < mIntermediateMat.rows()+tolerance )
-	                    {
-	                    	isxPts.add( isx );	// add to vector
-	                    }
-	            	}
-	            }
-	            
-	            if(isxPts.size() >= 4) {
-		            // Convert intersection points to a MatOfPoint structure
-		            Point[] isxPts_array = isxPts.toArray(new Point[isxPts.size()]);
-		            MatOfPoint isxPts_Mat = new MatOfPoint( isxPts_array );
-		            
-		            // Get bounding rectangle around intersections
-		            Rect bRect = Imgproc.boundingRect(isxPts_Mat);
-		
-		            // Determine corners:
-		            // 	For each corner of bounding box, find closest intersection point.
-		            // 	Use that intersection point as that corner of our warped perspective rectangle.
-		            Point p = new Point();
-		            for(int c = 0; c < 4; c++) {
-		            	switch(c) {
-		            	case(0): p = bRect.tl(); break;
-		            	case(1): p = new Point(bRect.tl().x+bRect.width,bRect.tl().y); break;
-		            	case(2): p = bRect.br(); break;
-		            	case(3): p = new Point(bRect.tl().x,bRect.tl().y+bRect.height); break;
-		            	}
-		            	
-		                double minDist = 10000;
-		                int cornerIdx = 0;
-		                for(int i = 0; i < isxPts.size(); i++) {
-		                	double distToPt = dist(p,isxPts.get(i));
-		                	if(distToPt < minDist) {
-		                		minDist = distToPt;
-		                		cornerIdx = i;
-		                	}
-		                }
-		                mCamCorners[c] = isxPts.get(cornerIdx);
-		            }
-		            
-		            Core.rectangle(mIntermediateMat, bRect.tl(), bRect.br(), new Scalar(52,150,192,255));
-		            
-		            mFoundCorners = true;
-	            }
-	            else { mFoundCorners = false; }
-
-            }
-            
-            if(METHOD == 3)
-            {
-            	// Detect Hough lines
-                Mat lines = new Mat();
-                int threshold = 40;
-                int minLineSize = 30;
-                int lineGap = 40;
-
-                Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
-
-            	// Draw lines to screen
-                boolean drawLines = true;
-                if(drawLines) {
-    		    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
-    	    		for (int x = 0; x < lines.cols(); x++) {
-    	                  double[] vec = lines.get(0, x);
-    	                  double x1 = vec[0], 
-    	                         y1 = vec[1],
-    	                         x2 = vec[2],
-    	                         y2 = vec[3];
-    	                  Point start = new Point(x1, y1);
-    	                  Point end = new Point(x2, y2);
-    	                  	
-    	                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
-    	            }
-                }
-                
-	            // Calculate line lengths
-	            double[] len = new double[lines.cols()];
-	            for (int i = 0; i < lines.cols(); i++) {
-	            	double[] vec = lines.get(0, i);
-	            	double x1 = vec[0], 
-	            		   y1 = vec[1],
-	                       x2 = vec[2],
-	                       y2 = vec[3];
-	                Point start = new Point(x1, y1);
-	                Point end = new Point(x2, y2);
-	                
-	                len[i] = dist(start, end);
-	            }
-	            
-	    		// Calculate intersections & weight them based on distance from endpoints and length of lines
-	            Point[][] isxPts = new Point[lines.cols()][lines.cols()];
-	            Mat isxWeights = new Mat(lines.cols(), lines.cols(), CvType.CV_32FC1);
-	    		for (int i = 0; i < lines.cols(); i++) {
-	    			
-	            	double[] vec_1 = lines.get(0, i);
-	            	double x1_1 = vec_1[0], 
-	            		   y1_1 = vec_1[1],
-	                       x2_1 = vec_1[2],
-	                       y2_1 = vec_1[3];
-	                Point start_1 = new Point(x1_1, y1_1);
-	                Point end_1 = new Point(x2_1, y2_1);
-	    			
-	            	for (int j = 0; j < lines.cols(); j++) {
-	            		
-	                	double[] vec_2 = lines.get(0, j);
-	                	double x1_2 = vec_2[0], 
-	                		   y1_2 = vec_2[1],
-	                           x2_2 = vec_2[2],
-	                           y2_2 = vec_2[3];
-	                    Point start_2 = new Point(x1_2, y1_2);
-	                    Point end_2 = new Point(x2_2, y2_2);
-	                    
-	                    // For every pair of lines...
-	                    
-	                    // Calculate intersection point
-	                    isxPts[i][j] = calcIntersection(start_1, end_1, start_2, end_2);
-	                    
-	                    // Calculate min distance from an endpoint of those lines
-	                    double minDist;
-	                    if(isxPts[i][j].x == Double.NaN || isxPts[i][j].y == Double.NaN) {
-	                    	// If the lines don't intersect, just set minDist as a big number
-	                    	minDist = 10000;
-	                    }
-	                    else {
-	                    	double[] endPtDists = new double[4];
-		                    endPtDists[0] = dist(start_1, isxPts[i][j]);
-		                    endPtDists[1] = dist(end_1,   isxPts[i][j]);
-		                    endPtDists[2] = dist(start_2, isxPts[i][j]);
-		                    endPtDists[3] = dist(end_2,   isxPts[i][j]);
-		                    
-		                    minDist = Math.min( Math.min(endPtDists[0], endPtDists[1]) , Math.min(endPtDists[2], endPtDists[3]) );
-	                    }
-	                    
-	                    // Get angle between lines
-	                    Mat line1 = new Mat(new Size(2,1), CvType.CV_32FC1);
-	                    	line1.put(1,1, end_1.x-start_1.x);
-	                    	line1.put(2,1, end_1.y-start_1.y);
-	                    	
-	                    Mat line2 = new Mat(new Size(2,1), CvType.CV_32FC1);
-		                    line2.put(1,1, end_2.x-start_2.x);
-		                	line2.put(2,1, end_2.y-start_2.y);
-		                		                	
-	                    double cosTheta = line1.dot(line2)/(Core.norm(line1,Core.NORM_L2) * Core.norm(line2,Core.NORM_L2));   
-	                                        
-	                    // Define weight as:
-	                    //		w = sqrt(length(line1)*length(line2)) * (minimum distance from an endpoint)^-1 * |angleBetweenLines|/PI
-	                    
-	                    //if(cosTheta != Double.NaN)
-	                    //	isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist) * (1.0 - Math.abs(Math.acos(cosTheta)/(3.14159/2.0)) - 1.0));
-	                    //else
-	                    //	isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
-	                    
-	                    isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
-	            	}
-	            }
-            
-	    		// find intersection points with max weightings
-	        	for(int i = 0; i < 4; i++) {
-	        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
-	        		Point maxWeightIdx = searchResult.maxLoc;
-	        		
-	        		if( maxWeightIdx.y > 0 && maxWeightIdx.x > 0 ) {
-	        			mCamCorners[i] = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
-	        			//System.out.println(mCamCorners[i].x + ", " + mCamCorners[i].y);
-	        		}
-	        		
-	        		// Zero out the this peak so we avoid repeats
-	        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
-	        		
-	        	}
- 
-	        	/*
-				// Try to collect 4 highest weighted *unique* intersections
-	        	int isxCounter = 0;
-	        	while (isxCounter < 4) {
-	        		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
-	        		Point maxWeightIdx = searchResult.maxLoc;
-	        		
-	        		Point isxPt = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
-	        		boolean isClose = false;
-	        		for(int i = 0; i < isxCounter; i++) {
-	        			if(Math.abs(isxPt.x - mCamCorners[i].x) <= 10 ||
-	        					Math.abs(isxPt.y - mCamCorners[i].y) <= 10)
-	        				isClose = true;
-	        		}
-	        		
-	        		if(!isClose) {
-	        			mCamCorners[isxCounter] = isxPt;
-	        			isxCounter++;
-	        		}
-	        		
-	        		// Zero out the this peak so we avoid repeats
-	        		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
-	        		
-	        		if(isxCounter == lines.cols()*lines.cols())
-	        			break;
-	        	}
-	        	*/
-	        	
-	        	/*
-		    	// Draw circles all intersections
-		    	for(int i = 0; i < lines.cols(); i++) {
-		    		for(int j = 0; j < lines.cols(); j++) {
-			    		Core.circle(mIntermediateMat, isxPts[i][j], 5, new Scalar(0,255,0,255), 1);
-		    		}
-		    	}
-		    	*/
-	        	
-	        	mFoundCorners = true;
-            }
-        	
-            if(METHOD == 4) 
-            {
-            	// Detect Hough lines
-                Mat lines = new Mat();
-                int threshold = 40;
-                int minLineSize = 30;
-                int lineGap = 40;
-
-                Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
-
-            	// Draw lines to screen
-                boolean drawLines = true;
-                if(drawLines) {
-    		    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
-    	    		for (int x = 0; x < lines.cols(); x++) {
-    	                  double[] vec = lines.get(0, x);
-    	                  double x1 = vec[0], 
-    	                         y1 = vec[1],
-    	                         x2 = vec[2],
-    	                         y2 = vec[3];
-    	                  Point start = new Point(x1, y1);
-    	                  Point end = new Point(x2, y2);
-    	                  	
-    	                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
-    	            }
-                }
-                
-	    		// Calculate intersections
-	            ArrayList<Point> isxPts  = new ArrayList<Point>();
-	            for (int i = 0; i < lines.cols(); i++) {
-	    			
-	            	double[] vec_1 = lines.get(0, i);
-	            	double x1_1 = vec_1[0], 
-	            		   y1_1 = vec_1[1],
-	                       x2_1 = vec_1[2],
-	                       y2_1 = vec_1[3];
-	                Point start_1 = new Point(x1_1, y1_1);
-	                Point end_1 = new Point(x2_1, y2_1);
-	    			
-	            	for (int j = 0; j < lines.cols(); j++) {
-	            		
-	                	double[] vec_2 = lines.get(0, j);
-	                	double x1_2 = vec_2[0], 
-	                		   y1_2 = vec_2[1],
-	                           x2_2 = vec_2[2],
-	                           y2_2 = vec_2[3];
-	                    Point start_2 = new Point(x1_2, y1_2);
-	                    Point end_2 = new Point(x2_2, y2_2);
-	                    
-	                    // Calculate intersection point for every pair of lines
-	                    Point isx = calcIntersection(start_1, end_1, start_2, end_2);
-	                    
-	                    // Make sure it's within a reasonable area
-	                    double tolerance = 100;
-	                    if (isx.x > -tolerance && isx.x < mIntermediateMat.cols()+tolerance &&
-	                    		isx.y > -tolerance && isx.y < mIntermediateMat.rows()+tolerance )
-	                    {
-	                    	isxPts.add( isx );	// add to vector
-	                    }
-	            	}
-	            }
-	            
-	            // Find bounding points
-	            double xMax = 0, yMax = 0, xMin = 10000, yMin = 10000;
-	            int xMax_ind = 0, yMax_ind = 0, xMin_ind = 0, yMin_ind = 0;
-	            
-	            for (int i = 0; i < isxPts.size(); i++) {
-	            	Point p = isxPts.get(i);
-	            	if(p.x > xMax) { xMax = p.x; xMax_ind = i; }
-	            	if(p.x < xMin) { xMin = p.x; xMin_ind = i; }
-	            	if(p.y > yMax) { yMax = p.y; yMax_ind = i; }
-	            	if(p.y < yMin) { yMin = p.y; yMin_ind = i; }
-	            }
-            
-	        	// First separate left and right corners
-	        	int[] leftPts = new int[2];
-	        	int[] rightPts = new int[2];
-
-	        	leftPts[0] = xMin_ind;
-	        	rightPts[0] = xMax_ind;
-	        	
-	        	if(isxPts.get(yMin_ind).x > isxPts.get(yMax_ind).x) {
-	        		leftPts[1] = yMax_ind;
-	        		rightPts[1] = yMin_ind;
-	        	}
-	        	else {
-	        		leftPts[1] = yMin_ind;
-	        		rightPts[1] = yMax_ind;
-	        	}
-
-	        	// Then separate top and bottom corners
-	        	if(isxPts.get(leftPts[0]).y > isxPts.get(leftPts[1]).y) {
-	        		mCamCorners[0] = isxPts.get(leftPts[0]);
-	        		mCamCorners[3] = isxPts.get(leftPts[1]);
-	        	}
-	        	else {
-	        		mCamCorners[0] = isxPts.get(leftPts[1]);
-	        		mCamCorners[3] = isxPts.get(leftPts[0]);
-	        	}
-	        	
-	        	if(isxPts.get(rightPts[0]).y > isxPts.get(rightPts[1]).y) {
-	        		mCamCorners[1] = isxPts.get(rightPts[0]);
-	        		mCamCorners[2] = isxPts.get(rightPts[1]);
-	        	}
-	        	else {
-	        		mCamCorners[1] = isxPts.get(rightPts[1]);
-	        		mCamCorners[2] = isxPts.get(rightPts[0]);
-	        	}
-	        		
-	        	// mCamCorners organized: TL, TR, BR, BL
-	        	
-	        	mFoundCorners = true;
-            }
-
+            if(METHOD == 1) contourCornerDetection(); // this one works best
+            if(METHOD == 2) bbCornerDetection(true);
+            if(METHOD == 3) weightedIsxCornerDetection(true);
+            if(METHOD == 4) bpCornerDetection(true);
             
             if(mFoundCorners) {
 		    	// Draw circles at corners (intersections)
-            	if(METHOD == 1) Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+            	if(mIntermediateMat.channels() == 1)
+            		Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
 		    	for(int i = 0; i < 4; i++) {
 		    		Core.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
 		    	}
@@ -714,7 +297,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);
         	
         	// Get corners
-        	getHarrisCorners(false);
+        	// getHarrisCorners(false);
+        	contourCornerDetection();
         	
         	// Draw image
         	drawWarpedImg(mUserImg);
@@ -755,6 +339,428 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         }
 
         return true;
+    }
+    
+    private void contourCornerDetection()
+    {
+		// Lowpass filter
+		//Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, new Size(5,5), 20.0);
+		
+		// Find contours
+		List<MatOfPoint> contours = new ArrayList<MatOfPoint>();
+		Imgproc.findContours(mIntermediateMat, contours, new Mat(), Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_SIMPLE);
+		            	
+		// Try to find rectangular contour
+		MatOfPoint2f rectApproxCurve = new MatOfPoint2f();
+		for(int i = 0; i < contours.size(); i++) {
+	    	// For each contour found in the image...
+			MatOfPoint contour = contours.get(i);
+	    	MatOfPoint2f contour2f = new MatOfPoint2f( contour.toArray() );
+	    	
+	    	// Get approx curve
+	    	MatOfPoint2f approxCurve = new MatOfPoint2f();
+	    	Imgproc.approxPolyDP(contour2f, approxCurve, ((int)contour.total())*0.05, true);
+	    	
+	    	// If the approx curve has 4 points, it's a rectangle
+	      	if(approxCurve.total() == 4) {
+	  			rectApproxCurve = approxCurve;
+	    	}
+		}
+		
+		if(rectApproxCurve.total() == 0) {
+			// If no rectangle curve found, give system two frames to recover 
+			if(mDroppedFrameCounter > 2) {
+				mFoundCorners = false;
+			}
+			else {
+				mDroppedFrameCounter++;
+			}
+		}
+		else {
+			// If rectangle curve found, get it's corners
+			for(int c = 0; c < 4; c++) {
+				double[] p = rectApproxCurve.get(c,0);
+				mCamCorners[c] = new Point(p[0],p[1]);
+				mFoundCorners = true;
+				mDroppedFrameCounter = 0;
+			}
+		}
+	}
+    
+    private void bbCornerDetection(boolean drawLines)
+    {
+	 	// Detect Hough lines
+	    Mat lines = new Mat();
+	    int threshold = 40;
+	    int minLineSize = 30;
+	    int lineGap = 40;
+	
+	    Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+	
+
+		// Draw lines to screen
+	    if(drawLines) {
+	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+			for (int x = 0; x < lines.cols(); x++) {
+	              double[] vec = lines.get(0, x);
+	              double x1 = vec[0], 
+	                     y1 = vec[1],
+	                     x2 = vec[2],
+	                     y2 = vec[3];
+	              Point start = new Point(x1, y1);
+	              Point end = new Point(x2, y2);
+	              	
+	              Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
+	        }
+	    }
+		    
+		// Calculate intersections
+	    ArrayList<Point> isxPts  = new ArrayList<Point>();
+	    for (int i = 0; i < lines.cols(); i++) {
+			
+	    	double[] vec_1 = lines.get(0, i);
+	    	double x1_1 = vec_1[0], 
+	    		   y1_1 = vec_1[1],
+	               x2_1 = vec_1[2],
+	               y2_1 = vec_1[3];
+	        Point start_1 = new Point(x1_1, y1_1);
+	        Point end_1 = new Point(x2_1, y2_1);
+			
+	    	for (int j = 0; j < lines.cols(); j++) {
+	    		
+	        	double[] vec_2 = lines.get(0, j);
+	        	double x1_2 = vec_2[0], 
+	        		   y1_2 = vec_2[1],
+	                   x2_2 = vec_2[2],
+	                   y2_2 = vec_2[3];
+	            Point start_2 = new Point(x1_2, y1_2);
+	            Point end_2 = new Point(x2_2, y2_2);
+	            
+	            // Calculate intersection point for every pair of lines
+	            Point isx = calcIntersection(start_1, end_1, start_2, end_2);
+	            
+	            // Make sure it's within a reasonable area
+	            double tolerance = 100;
+	            if (isx.x > -tolerance && isx.x < mIntermediateMat.cols()+tolerance &&
+	            		isx.y > -tolerance && isx.y < mIntermediateMat.rows()+tolerance )
+	            {
+	            	isxPts.add( isx );	// add to vector
+	            }
+	    	}
+	    }
+	    
+	    if(isxPts.size() >= 4) {
+	        // Convert intersection points to a MatOfPoint structure
+	        Point[] isxPts_array = isxPts.toArray(new Point[isxPts.size()]);
+	        MatOfPoint isxPts_Mat = new MatOfPoint( isxPts_array );
+	        
+	        // Get bounding rectangle around intersections
+	        Rect bRect = Imgproc.boundingRect(isxPts_Mat);
+	
+	        // Determine corners:
+	        // 	For each corner of bounding box, find closest intersection point.
+	        // 	Use that intersection point as that corner of our warped perspective rectangle.
+	        Point p = new Point();
+	        for(int c = 0; c < 4; c++) {
+	        	switch(c) {
+	        	case(0): p = bRect.tl(); break;
+	        	case(1): p = new Point(bRect.tl().x+bRect.width,bRect.tl().y); break;
+	        	case(2): p = bRect.br(); break;
+	        	case(3): p = new Point(bRect.tl().x,bRect.tl().y+bRect.height); break;
+	        	}
+	        	
+	            double minDist = 10000;
+	            int cornerIdx = 0;
+	            for(int i = 0; i < isxPts.size(); i++) {
+	            	double distToPt = dist(p,isxPts.get(i));
+	            	if(distToPt < minDist) {
+	            		minDist = distToPt;
+	            		cornerIdx = i;
+	            	}
+	            }
+	            mCamCorners[c] = isxPts.get(cornerIdx);
+	        }
+	        
+	        if(drawLines)
+	        	Core.rectangle(mIntermediateMat, bRect.tl(), bRect.br(), new Scalar(52,150,192,255));
+	        
+	        mFoundCorners = true;
+	    }
+	    else { mFoundCorners = false; }
+	}
+		
+    private void weightedIsxCornerDetection(boolean drawLines)
+    {
+    	// Detect Hough lines
+        Mat lines = new Mat();
+        int threshold = 40;
+        int minLineSize = 30;
+        int lineGap = 40;
+
+        Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+
+    	// Draw lines to screen
+        if(drawLines) {
+	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+    		for (int x = 0; x < lines.cols(); x++) {
+                  double[] vec = lines.get(0, x);
+                  double x1 = vec[0], 
+                         y1 = vec[1],
+                         x2 = vec[2],
+                         y2 = vec[3];
+                  Point start = new Point(x1, y1);
+                  Point end = new Point(x2, y2);
+                  	
+                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
+            }
+        }
+        
+        // Calculate line lengths
+        double[] len = new double[lines.cols()];
+        for (int i = 0; i < lines.cols(); i++) {
+        	double[] vec = lines.get(0, i);
+        	double x1 = vec[0], 
+        		   y1 = vec[1],
+                   x2 = vec[2],
+                   y2 = vec[3];
+            Point start = new Point(x1, y1);
+            Point end = new Point(x2, y2);
+            
+            len[i] = dist(start, end);
+        }
+        
+		// Calculate intersections & weight them based on distance from endpoints and length of lines
+        Point[][] isxPts = new Point[lines.cols()][lines.cols()];
+        Mat isxWeights = new Mat(lines.cols(), lines.cols(), CvType.CV_32FC1);
+		for (int i = 0; i < lines.cols(); i++) {
+			
+        	double[] vec_1 = lines.get(0, i);
+        	double x1_1 = vec_1[0], 
+        		   y1_1 = vec_1[1],
+                   x2_1 = vec_1[2],
+                   y2_1 = vec_1[3];
+            Point start_1 = new Point(x1_1, y1_1);
+            Point end_1 = new Point(x2_1, y2_1);
+			
+        	for (int j = 0; j < lines.cols(); j++) {
+        		
+            	double[] vec_2 = lines.get(0, j);
+            	double x1_2 = vec_2[0], 
+            		   y1_2 = vec_2[1],
+                       x2_2 = vec_2[2],
+                       y2_2 = vec_2[3];
+                Point start_2 = new Point(x1_2, y1_2);
+                Point end_2 = new Point(x2_2, y2_2);
+                
+                // For every pair of lines...
+                
+                // Calculate intersection point
+                isxPts[i][j] = calcIntersection(start_1, end_1, start_2, end_2);
+                
+                // Calculate min distance from an endpoint of those lines
+                double minDist;
+                if(isxPts[i][j].x == Double.NaN || isxPts[i][j].y == Double.NaN) {
+                	// If the lines don't intersect, just set minDist as a big number
+                	minDist = 10000;
+                }
+                else {
+                	double[] endPtDists = new double[4];
+                    endPtDists[0] = dist(start_1, isxPts[i][j]);
+                    endPtDists[1] = dist(end_1,   isxPts[i][j]);
+                    endPtDists[2] = dist(start_2, isxPts[i][j]);
+                    endPtDists[3] = dist(end_2,   isxPts[i][j]);
+                    
+                    minDist = Math.min( Math.min(endPtDists[0], endPtDists[1]) , Math.min(endPtDists[2], endPtDists[3]) );
+                }
+                
+                // Get angle between lines
+                Mat line1 = new Mat(new Size(2,1), CvType.CV_32FC1);
+                	line1.put(1,1, end_1.x-start_1.x);
+                	line1.put(2,1, end_1.y-start_1.y);
+                	
+                Mat line2 = new Mat(new Size(2,1), CvType.CV_32FC1);
+                    line2.put(1,1, end_2.x-start_2.x);
+                	line2.put(2,1, end_2.y-start_2.y);
+                		                	
+                double cosTheta = line1.dot(line2)/(Core.norm(line1,Core.NORM_L2) * Core.norm(line2,Core.NORM_L2));   
+                                    
+                // Define weight as:
+                //		w = sqrt(length(line1)*length(line2)) * (minimum distance from an endpoint)^-1 * |angleBetweenLines|/PI
+                
+                //if(cosTheta != Double.NaN)
+                //	isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist) * (1.0 - Math.abs(Math.acos(cosTheta)/(3.14159/2.0)) - 1.0));
+                //else
+                //	isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
+                
+                isxWeights.put(i, j, Math.sqrt(len[i] * len[j]) * (1/minDist));
+        	}
+        }
+    
+		// find intersection points with max weightings
+    	for(int i = 0; i < 4; i++) {
+    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+    		Point maxWeightIdx = searchResult.maxLoc;
+    		
+    		if( maxWeightIdx.y > 0 && maxWeightIdx.x > 0 ) {
+    			mCamCorners[i] = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+    		}
+    		
+    		// Zero out the this peak so we avoid repeats
+    		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+    		
+    	}
+
+    	/*
+		// Try to collect 4 highest weighted *unique* intersections
+    	int isxCounter = 0;
+    	while (isxCounter < 4) {
+    		Core.MinMaxLocResult searchResult = Core.minMaxLoc(isxWeights);
+    		Point maxWeightIdx = searchResult.maxLoc;
+    		
+    		Point isxPt = isxPts[(int)maxWeightIdx.y][(int)maxWeightIdx.x];
+    		boolean isClose = false;
+    		for(int i = 0; i < isxCounter; i++) {
+    			if(Math.abs(isxPt.x - mCamCorners[i].x) <= 10 ||
+    					Math.abs(isxPt.y - mCamCorners[i].y) <= 10)
+    				isClose = true;
+    		}
+    		
+    		if(!isClose) {
+    			mCamCorners[isxCounter] = isxPt;
+    			isxCounter++;
+    		}
+    		
+    		// Zero out the this peak so we avoid repeats
+    		isxWeights.put((int)maxWeightIdx.y, (int)maxWeightIdx.x, 0.0);
+    		
+    		if(isxCounter == lines.cols()*lines.cols())
+    			break;
+    	}
+    	*/
+    	
+    	/*
+    	// Draw circles all intersections
+    	for(int i = 0; i < lines.cols(); i++) {
+    		for(int j = 0; j < lines.cols(); j++) {
+	    		Core.circle(mIntermediateMat, isxPts[i][j], 5, new Scalar(0,255,0,255), 1);
+    		}
+    	}
+    	*/
+    	
+    	mFoundCorners = true;
+    }
+    
+    private void bpCornerDetection(boolean drawLines)
+    {
+    	// Detect Hough lines
+        Mat lines = new Mat();
+        int threshold = 40;
+        int minLineSize = 30;
+        int lineGap = 40;
+
+        Imgproc.HoughLinesP(mIntermediateMat, lines, 1, Math.PI/180, threshold, minLineSize, lineGap);
+
+    	// Draw lines to screen
+        if(drawLines) {
+	    	Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+    		for (int x = 0; x < lines.cols(); x++) {
+                  double[] vec = lines.get(0, x);
+                  double x1 = vec[0], 
+                         y1 = vec[1],
+                         x2 = vec[2],
+                         y2 = vec[3];
+                  Point start = new Point(x1, y1);
+                  Point end = new Point(x2, y2);
+                  	
+                  Core.line(mIntermediateMat, start, end, new Scalar(255,0,0,255), 1);
+            }
+        }
+        
+		// Calculate intersections
+        ArrayList<Point> isxPts  = new ArrayList<Point>();
+        for (int i = 0; i < lines.cols(); i++) {
+			
+        	double[] vec_1 = lines.get(0, i);
+        	double x1_1 = vec_1[0], 
+        		   y1_1 = vec_1[1],
+                   x2_1 = vec_1[2],
+                   y2_1 = vec_1[3];
+            Point start_1 = new Point(x1_1, y1_1);
+            Point end_1 = new Point(x2_1, y2_1);
+			
+        	for (int j = 0; j < lines.cols(); j++) {
+        		
+            	double[] vec_2 = lines.get(0, j);
+            	double x1_2 = vec_2[0], 
+            		   y1_2 = vec_2[1],
+                       x2_2 = vec_2[2],
+                       y2_2 = vec_2[3];
+                Point start_2 = new Point(x1_2, y1_2);
+                Point end_2 = new Point(x2_2, y2_2);
+                
+                // Calculate intersection point for every pair of lines
+                Point isx = calcIntersection(start_1, end_1, start_2, end_2);
+                
+                // Make sure it's within a reasonable area
+                double tolerance = 100;
+                if (isx.x > -tolerance && isx.x < mIntermediateMat.cols()+tolerance &&
+                		isx.y > -tolerance && isx.y < mIntermediateMat.rows()+tolerance )
+                {
+                	isxPts.add( isx );	// add to vector
+                }
+        	}
+        }
+        
+        // Find bounding points
+        double xMax = 0, yMax = 0, xMin = 10000, yMin = 10000;
+        int xMax_ind = 0, yMax_ind = 0, xMin_ind = 0, yMin_ind = 0;
+        
+        for (int i = 0; i < isxPts.size(); i++) {
+        	Point p = isxPts.get(i);
+        	if(p.x > xMax) { xMax = p.x; xMax_ind = i; }
+        	if(p.x < xMin) { xMin = p.x; xMin_ind = i; }
+        	if(p.y > yMax) { yMax = p.y; yMax_ind = i; }
+        	if(p.y < yMin) { yMin = p.y; yMin_ind = i; }
+        }
+    
+    	// First separate left and right corners
+    	int[] leftPts = new int[2];
+    	int[] rightPts = new int[2];
+
+    	leftPts[0] = xMin_ind;
+    	rightPts[0] = xMax_ind;
+    	
+    	if(isxPts.get(yMin_ind).x > isxPts.get(yMax_ind).x) {
+    		leftPts[1] = yMax_ind;
+    		rightPts[1] = yMin_ind;
+    	}
+    	else {
+    		leftPts[1] = yMin_ind;
+    		rightPts[1] = yMax_ind;
+    	}
+
+    	// Then separate top and bottom corners
+    	if(isxPts.get(leftPts[0]).y > isxPts.get(leftPts[1]).y) {
+    		mCamCorners[0] = isxPts.get(leftPts[0]);
+    		mCamCorners[3] = isxPts.get(leftPts[1]);
+    	}
+    	else {
+    		mCamCorners[0] = isxPts.get(leftPts[1]);
+    		mCamCorners[3] = isxPts.get(leftPts[0]);
+    	}
+    	
+    	if(isxPts.get(rightPts[0]).y > isxPts.get(rightPts[1]).y) {
+    		mCamCorners[1] = isxPts.get(rightPts[0]);
+    		mCamCorners[2] = isxPts.get(rightPts[1]);
+    	}
+    	else {
+    		mCamCorners[1] = isxPts.get(rightPts[1]);
+    		mCamCorners[2] = isxPts.get(rightPts[0]);
+    	}
+    		
+    	// mCamCorners organized: TL, TR, BR, BL
+    	
+    	mFoundCorners = true;
     }
     
     private void updateTouchPoint()
