@@ -229,37 +229,43 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         		break;
         	}
         	
-        	// Do thresholding
-        	Imgproc.GaussianBlur(mRgba, mIntermediateMat, mKernelSize, 20.0);
-        	
-        	double thresh = 1.5;
-        	colorThreshold(mIntermediateMat, mIntermediateMat, thresh, mColorData);
-        	
+        	// Color threshold
+        	double thresh2 = 1.5;
+        	colorThreshold(mRgba, mIntermediateMat, thresh2, mColorData);
+	
+        	// Isolate the object of interest
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
-        	    	
-        	// Detect edges
-        	Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
+        	mWarpMask = mIntermediateMat.clone();
         	
-            // SELECT METHOD:
-            int METHOD = 1; 
-            //	1 : Contour detection + polygonal curve approximation method
-            //	2 : Hough lines + intersections bounding box method
-            //	3 : Hough lines + weighted intersections method
-            //	4 : Hough lines + max X,Y method
-            
-            if(METHOD == 1) contourCornerDetection(); // this one works best
-            if(METHOD == 2) bbCornerDetection(true);
-            if(METHOD == 3) weightedIsxCornerDetection(true);
-            if(METHOD == 4) bpCornerDetection(true);
-            
-            if(mFoundCorners) {
-		    	// Draw circles at corners (intersections)
-            	if(mIntermediateMat.channels() == 1)
-            		Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
-		    	for(int i = 0; i < 4; i++) {
-		    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
-		    	}
-            }
+        	// Low-pass filter
+        	Imgproc.GaussianBlur(mIntermediateMat, mIntermediateMat, mKernelSize, 20.0);
+        	
+        	// Get corners
+        	getHarrisCorners(true);
+        	    	
+//        	// Detect edges
+//        	//Imgproc.Canny(mIntermediateMat, mIntermediateMat, 80, 100);
+//        	
+//            // SELECT METHOD:
+//            int METHOD = 1; 
+//            //	1 : Contour detection + polygonal curve approximation method
+//            //	2 : Hough lines + intersections bounding box method
+//            //	3 : Hough lines + weighted intersections method
+//            //	4 : Hough lines + max X,Y method
+//            
+//            if(METHOD == 1) contourCornerDetection(); // this one works best
+//            if(METHOD == 2) bbCornerDetection(true);
+//            if(METHOD == 3) weightedIsxCornerDetection(true);
+//            if(METHOD == 4) bpCornerDetection(true);
+//            
+//            if(mFoundCorners) {
+//		    	// Draw circles at corners (intersections)
+//            	if(mIntermediateMat.channels() == 1)
+//            		Imgproc.cvtColor(mIntermediateMat, mIntermediateMat, Imgproc.COLOR_GRAY2RGBA, 4);
+//		    	for(int i = 0; i < 4; i++) {
+//		    		Imgproc.circle(mIntermediateMat, mCamCorners[i], 5, new Scalar(0,255,0,255), 1);
+//		    	}
+//            }
 
             mRgba = mIntermediateMat;
             break;
@@ -280,8 +286,8 @@ public class FinalProject extends Activity implements CvCameraViewListener2 {
         	}
         	
         	// Color threshold
-        	double thresh2 = 1.5;
-        	colorThreshold(mRgba, mIntermediateMat, thresh2, mColorData);
+        	double thresh = 1.5;
+        	colorThreshold(mRgba, mIntermediateMat, thresh, mColorData);
 	
         	// Isolate the object of interest
         	mIntermediateMat = isolateComponent(mIntermediateMat, mTouchPoint);
